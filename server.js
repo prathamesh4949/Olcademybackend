@@ -12,26 +12,29 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieparser())
 
-// CORS fix
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', 'https://olcademyfrontend.vercel.app');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.header('Access-Control-Allow-Credentials', 'true');
-  
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-});
-
+// Simple CORS configuration that works with Vercel
 app.use(cors({
   origin: [
     "http://localhost:4028",
-    "https://olcademyfrontend.vercel.app"
+    "https://olcademyfrontend.vercel.app",
+    process.env.FRONTEND_URL
   ],
-  credentials: true,
+  credentials: true
 }))
+
+// Manual CORS headers for better compatibility
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'https://olcademyfrontend.vercel.app');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
 
 //api
 app.use('/user', userRoutes);
@@ -41,18 +44,7 @@ app.get("/", (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000
-
-// Connect to DB first, then start server
-const startServer = async () => {
-  try {
-    await connectDB();
-    app.listen(PORT, () => {
-      console.log(`Server running on PORT ${PORT}`);
-    });
-  } catch (error) {
-    console.error('Failed to start server:', error);
-    process.exit(1);
-  }
-}
-
-startServer();
+app.listen(PORT, () => {
+  connectDB()
+  console.log(`Server running on PORT ${PORT}`);
+})
