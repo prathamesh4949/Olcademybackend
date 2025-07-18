@@ -12,31 +12,29 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieparser())
 
-// Updated CORS configuration
+// Simple CORS configuration that works with Vercel
 app.use(cors({
-  origin: [
-    "http://localhost:4028",
-    "https://olcademyfrontend.vercel.app",  // Add your actual frontend URL
-    process.env.FRONTEND_URL
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
-  optionsSuccessStatus: 200
-}))
-
-// Handle preflight requests explicitly
-app.options('*', cors({
   origin: [
     "http://localhost:4028",
     "https://olcademyfrontend.vercel.app",
     process.env.FRONTEND_URL
   ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'Cookie'],
-  optionsSuccessStatus: 200
-}));
+  credentials: true
+}))
+
+// Manual CORS headers for better compatibility
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'https://olcademyfrontend.vercel.app');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  
+  if (req.method === 'OPTIONS') {
+    res.sendStatus(200);
+  } else {
+    next();
+  }
+});
 
 //api
 app.use('/user', userRoutes);
