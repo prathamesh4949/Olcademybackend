@@ -67,7 +67,24 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 3000
 
-app.listen(PORT, () => {
-    connectDB()
-    console.log(`Server running on PORT ${PORT}`);
-})
+// Connect to database before starting server
+const startServer = async () => {
+    try {
+        console.log('Environment check:', {
+            NODE_ENV: process.env.NODE_ENV,
+            DATABASE_URL: process.env.DATABASE_URL ? 'Present' : 'Missing',
+            FRONTEND_URL: process.env.FRONTEND_URL || 'Not set'
+        });
+        
+        await connectDB();
+        
+        app.listen(PORT, () => {
+            console.log(`Server running successfully on PORT ${PORT}`);
+        });
+    } catch (error) {
+        console.error('Server startup error:', error);
+        process.exit(1);
+    }
+};
+
+startServer();
