@@ -26,17 +26,7 @@ app.use(cors({
 
 // Manual CORS headers for better compatibility
 app.use((req, res, next) => {
-    const allowedOrigins = [
-        'http://localhost:4028',
-        'https://olcademyfrontend.vercel.app',
-        process.env.FRONTEND_URL
-    ];
-    
-    const origin = req.headers.origin;
-    if (allowedOrigins.includes(origin)) {
-        res.header('Access-Control-Allow-Origin', origin);
-    }
-    
+    res.header('Access-Control-Allow-Origin', 'https://olcademyfrontend.vercel.app');
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie');
     res.header('Access-Control-Allow-Credentials', 'true');
@@ -48,16 +38,6 @@ app.use((req, res, next) => {
     }
 });
 
-// Add error handling middleware
-app.use((err, req, res, next) => {
-    console.error('Error details:', err);
-    res.status(500).json({
-        message: "Server error. Please try again later.",
-        success: false,
-        error: process.env.NODE_ENV === 'development' ? err.message : undefined
-    });
-});
-
 //api
 app.use('/user', userRoutes);
 
@@ -67,24 +47,7 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 3000
 
-// Connect to database before starting server
-const startServer = async () => {
-    try {
-        console.log('Environment check:', {
-            NODE_ENV: process.env.NODE_ENV,
-            DATABASE_URL: process.env.DATABASE_URL ? 'Present' : 'Missing',
-            FRONTEND_URL: process.env.FRONTEND_URL || 'Not set'
-        });
-        
-        await connectDB();
-        
-        app.listen(PORT, () => {
-            console.log(`Server running successfully on PORT ${PORT}`);
-        });
-    } catch (error) {
-        console.error('Server startup error:', error);
-        process.exit(1);
-    }
-};
-
-startServer();
+app.listen(PORT, () => {
+    connectDB()
+    console.log(`Server running on PORT ${PORT}`);
+})
