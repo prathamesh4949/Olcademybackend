@@ -1,11 +1,12 @@
+// api/index.js (Create this file in api folder)
 import express from 'express'
 import dotenv from "dotenv"
 import cookieparser from 'cookie-parser'
-import userRoutes from './routes/UserRoutes.js'
+import userRoutes from '../routes/UserRoutes.js'
 import cors from "cors"
-import { connectDB } from './utils/db.js'
+import { connectDB } from '../utils/db.js'
 
-// Load environment variables first
+// Load environment variables
 dotenv.config();
 
 const app = express();
@@ -15,14 +16,6 @@ process.on('unhandledRejection', (err) => {
     console.error('Unhandled Promise Rejection:', err);
 });
 
-process.on('uncaughtException', (err) => {
-    console.error('Uncaught Exception:', err);
-    process.exit(1);
-});
-
-// Connect to database first
-connectDB();
-
 // Middlewares
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
@@ -30,24 +23,12 @@ app.use(cookieparser());
 
 // CORS configuration
 const corsOptions = {
-    origin: function (origin, callback) {
-        const allowedOrigins = [
-            'http://localhost:4028',
-            'http://localhost:3000',
-            'https://olcademyfrontend.vercel.app',
-            process.env.FRONTEND_URL
-        ].filter(Boolean); // Remove undefined values
-
-        // Allow requests with no origin (mobile apps, Postman, etc.)
-        if (!origin) return callback(null, true);
-        
-        if (allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            console.log('Blocked origin:', origin);
-            callback(new Error('Not allowed by CORS'));
-        }
-    },
+    origin: [
+        'http://localhost:4028',
+        'http://localhost:3000', 
+        'https://olcademyfrontend.vercel.app',
+        process.env.FRONTEND_URL
+    ].filter(Boolean),
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'X-Requested-With'],
@@ -56,7 +37,7 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// Additional CORS headers for better compatibility
+// Additional CORS headers
 app.use((req, res, next) => {
     const origin = req.headers.origin;
     const allowedOrigins = [
@@ -75,16 +56,27 @@ app.use((req, res, next) => {
     res.header('Access-Control-Allow-Credentials', 'true');
     
     if (req.method === 'OPTIONS') {
-        res.sendStatus(200);
-    } else {
-        next();
+        return res.sendStatus(200);
     }
+    next();
 });
 
-// Request logging middleware
-app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
-    console.log('Request body:', req.body);
+// Connect to database on serverless function initialization
+let dbConnected = false;
+const initDB = async () => {
+    if (!dbConnected) {
+        try {
+            await connectDB();
+            dbConnected = true;
+        } catch (error) {
+            console.error('Database connection failed:', error);
+        }
+    }
+};
+
+// Middleware to ensure DB connection
+app.use(async (req, res, next) => {
+    await initDB();
     next();
 });
 
@@ -117,15 +109,5 @@ app.use((err, req, res, next) => {
         ...(process.env.NODE_ENV === 'development' && { error: err.message })
     });
 });
-
-const PORT = process.env.PORT || 3000;
-
-// For Vercel deployment
-if (process.env.NODE_ENV !== 'production') {
-    app.listen(PORT, () => {
-        console.log(`Server running on PORT ${PORT}`);
-        console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
-    });
-}
 
 export default app;
