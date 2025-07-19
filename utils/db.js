@@ -1,52 +1,66 @@
 import mongoose from 'mongoose';
-import dotenv from 'dotenv';
 
-dotenv.config();
-
-// Global variable to cache the connection
-let cachedConnection = null;
+let isConnected = false;
 
 export const connectDB = async () => {
-  // If we already have a cached connection, return it
-  if (cachedConnection && mongoose.connection.readyState === 1) {
-    console.log('Using cached MongoDB connection');
-    return cachedConnection;
-  }
+    // If already connected, don't connect again
+    if (isConnected) {
+        console.log('Database already connected');
+        return;
+    }
 
-  try {
-    // Configure mongoose for serverless environment
-    mongoose.set('bufferCommands', false);
-    mongoose.set('bufferMaxEntries', 0);
+    try {
+        // Check if MONGO_URI exists
+        if (!process.env.MONGO_URI) {
+            throw new Error('MONGO_URI environment variable is not defined');
+        }
 
-    // Connect with optimized settings for Vercel
-    const connection = await mongoose.connect(process.env.MONGO_URI, {
-      serverSelectionTimeoutMS: 5000, // Reduce from default 30s
-      socketTimeoutMS: 45000,
-      maxPoolSize: 1, // Limit connection pool for serverless
-      bufferCommands: false,
-      bufferMaxEntries: 0,
-    });
+        console.log('Attempting to connect to MongoDB...');
+        
+        const conn = await mongoose.connect(process.env.MONGO_URI, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+            serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
+            socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+            maxPoolSize: 10, // Maintain up to 10 socket connections
+            bufferCommands: false, // Disable mongoose buffering
+            bufferMaxEntries: 0 // Disable mongoose buffering
+        });
 
-    console.log('New MongoDB connection established');
-    cachedConnection = connection;
-    return connection;
+        isConnected = true;
+        console.log(`MongoDB connected successfully: ${conn.connection.host}`);
 
-  } catch (error) {
-    console.error('MongoDB connection error:', error);
-    throw error;
-  }
+        // Handle connection events
+        mongoose.connection.on('connected', () => {
+            console.log('Mongoose connected to MongoDB');
+        });
+
+        mongoose.connection.on('error', (err) => {
+            console.error('Mongoose connection error:', err);
+            isConnected = false;
+        });
+
+        mongoose.connection.on('disconnected', () => {
+            console.log('Mongoose disconnected');
+            isConnected = false;
+        });
+
+        // Handle process termination
+        process.on('SIGINT', async () => {
+            await mongoose.connection.close();
+            console.log('MongoDB connection closed due to process termination');
+            process.exit(0);
+        });
+
+    } catch (error) {
+        console.error('Database connection failed:', error.message);
+        isConnected = false;
+        
+        // Don't exit in production, let Vercel handle retries
+        if (process.env.NODE_ENV !== 'production') {
+            process.exit(1);
+        }
+        
+        throw error;
+    }
 };
-
-// Optional: Add connection event handlers
-mongoose.connection.on('connected', () => {
-  console.log('Mongoose connected to MongoDB');
-});
-
-mongoose.connection.on('error', (err) => {
-  console.error('Mongoose connection error:', err);
-});
-
-mongoose.connection.on('disconnected', () => {
-  console.log('Mongoose disconnected');
-  cachedConnection = null;
-});
