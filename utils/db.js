@@ -3,14 +3,12 @@ import mongoose from 'mongoose';
 let isConnected = false;
 
 export const connectDB = async () => {
-    // If already connected, return
     if (isConnected && mongoose.connection.readyState === 1) {
         console.log('Already connected to database');
         return;
     }
 
     try {
-        // Check for different possible environment variable names
         const dbURL = process.env.MONGO_URI || 
                      process.env.DATABASE_URL || 
                      process.env.MONGODB_URI;
@@ -27,12 +25,11 @@ export const connectDB = async () => {
         console.log('Connecting to database...');
         console.log('Using connection string from:', dbURL.includes('mongodb+srv') ? 'MongoDB Atlas' : 'Local MongoDB');
 
-        // Disconnect if already connected to avoid duplicate connections
         if (mongoose.connection.readyState !== 0) {
             await mongoose.disconnect();
         }
 
-        // Mongoose connection with proper settings for Vercel
+        // Updated connection options
         await mongoose.connect(dbURL, {
             useNewUrlParser: true,
             useUnifiedTopology: true,
@@ -40,15 +37,12 @@ export const connectDB = async () => {
             serverSelectionTimeoutMS: 10000, // Keep trying to send operations for 10 seconds
             socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
             connectTimeoutMS: 10000, // Give up initial connection after 10 seconds
-            bufferMaxEntries: 0, // Disable mongoose buffering
-            bufferCommands: false, // Disable mongoose buffering
         });
 
         isConnected = true;
         console.log('✅ Database connected successfully');
         console.log('Connected to database:', mongoose.connection.name);
                 
-        // Handle connection events
         mongoose.connection.on('error', (err) => {
             console.error('❌ Database error:', err);
             isConnected = false;
@@ -70,7 +64,6 @@ export const connectDB = async () => {
         console.error('❌ Database connection failed:', error);
         isConnected = false;
         
-        // More specific error messages
         if (error.message.includes('authentication failed')) {
             throw new Error('Database authentication failed. Check username and password.');
         } else if (error.message.includes('network')) {
