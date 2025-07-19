@@ -2,10 +2,14 @@ import { User } from "../models/User.js"
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
 import { sendMail } from "../middlewares/emailTransporter.js"
+import { connectDB } from "../utils/db.js"
 
 //sign up
 export const register = async (req, res) => {
     try {
+        // Ensure database connection
+        await connectDB();
+        
         console.log('Register endpoint hit:', req.body);
         
         const { email, password } = req.body
@@ -37,17 +41,7 @@ export const register = async (req, res) => {
         const hashedPassword = await bcrypt.hash(password, 10)
         const otp = Math.floor(100000 + Math.random() * 900000);
         
-        // Send email first, then save user
-        try {
-            await sendMail(email, otp);
-        } catch (emailError) {
-            console.error('Email sending failed:', emailError);
-            return res.status(500).json({
-                message: "Failed to send verification email. Please try again.",
-                success: false
-            });
-        }
-
+        // Create user first, then send email
         const newUser = new User({
             email,
             password: hashedPassword,
@@ -57,6 +51,16 @@ export const register = async (req, res) => {
         })
         
         await newUser.save()
+        
+        // Send email after user is created (non-blocking approach)
+        try {
+            await sendMail(email, otp);
+            console.log('Email sent successfully to:', email);
+        } catch (emailError) {
+            console.error('Email sending failed:', emailError);
+            // Don't return error here - user is already created
+            // We'll handle email sending failure gracefully
+        }
         
         res.status(201).json({
             message: "User registered successfully. Please check your email for verification code.",
@@ -68,6 +72,22 @@ export const register = async (req, res) => {
         })
     } catch (error) {
         console.error('Registration error:', error);
+        
+        // More specific error handling
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({ 
+                message: 'Invalid user data provided.',
+                success: false 
+            });
+        }
+        
+        if (error.code === 11000) {
+            return res.status(409).json({ 
+                message: 'User already exists.',
+                success: false 
+            });
+        }
+        
         res.status(500).json({ 
             message: 'Server error. Please try again later.',
             success: false 
@@ -78,6 +98,9 @@ export const register = async (req, res) => {
 //verify email
 export const verifyEmail = async (req, res) => {
     try {
+        // Ensure database connection
+        await connectDB();
+        
         console.log('Verify email endpoint hit:', req.body);
         
         const { email, emailOtp } = req.body
@@ -140,6 +163,9 @@ export const verifyEmail = async (req, res) => {
 
 export const resendOtp = async (req, res) => {
     try {
+        // Ensure database connection
+        await connectDB();
+        
         console.log('Resend OTP endpoint hit:', req.body);
         
         const { email } = req.body;
@@ -174,6 +200,7 @@ export const resendOtp = async (req, res) => {
         
         try {
             await sendMail(email, otp)
+            console.log('OTP resent successfully to:', email);
         } catch (emailError) {
             console.error('Email sending failed:', emailError);
             return res.status(500).json({
@@ -198,6 +225,9 @@ export const resendOtp = async (req, res) => {
 //login
 export const login = async (req, res) => {
     try {
+        // Ensure database connection
+        await connectDB();
+        
         console.log('Login endpoint hit:', req.body);
         
         const { email, password } = req.body
