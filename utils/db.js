@@ -3,60 +3,49 @@ import mongoose from 'mongoose';
 let isConnected = false;
 
 export const connectDB = async () => {
-    // If already connected in this serverless function instance, return
-    if (isConnected && mongoose.connection.readyState === 1) {
-        console.log('Database already connected');
-        return mongoose.connection;
+    // If already connected, return
+    if (isConnected) {
+        console.log('Already connected to database');
+        return;
     }
 
     try {
-        // Check if MONGO_URI exists
-        if (!process.env.MONGO_URI) {
-            throw new Error('MONGO_URI environment variable is not defined');
+        const dbURL = process.env.DATABASE_URL || process.env.MONGODB_URI;
+        
+        if (!dbURL) {
+            throw new Error('DATABASE_URL not found in environment variables');
         }
 
-        console.log('Connecting to MongoDB...');
-        
-        // Disconnect if there's an existing connection in bad state
-        if (mongoose.connection.readyState !== 0) {
-            await mongoose.disconnect();
-        }
-        
-        const conn = await mongoose.connect(process.env.MONGO_URI, {
-            // Remove deprecated options for newer mongoose versions
-            serverSelectionTimeoutMS: 10000, // 10 seconds
-            socketTimeoutMS: 45000,
-            maxPoolSize: 5, // Smaller pool for serverless
-            minPoolSize: 1,
-            maxIdleTimeMS: 30000,
-            bufferCommands: false,
-            bufferMaxEntries: 0
+        console.log('Connecting to database...');
+
+        // Mongoose connection with proper settings for Vercel
+        await mongoose.connect(dbURL, {
+            useNewUrlParser: true,
+            useUnifiedTopology: true,
+            maxPoolSize: 10, // Maintain up to 10 socket connections
+            serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5 seconds
+            socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+            bufferMaxEntries: 0, // Disable mongoose buffering
+            bufferCommands: false, // Disable mongoose buffering
         });
 
         isConnected = true;
-        console.log(`MongoDB connected: ${conn.connection.host}`);
+        console.log('Database connected successfully');
         
-        return conn.connection;
+        // Handle connection events
+        mongoose.connection.on('error', (err) => {
+            console.error('Database error:', err);
+            isConnected = false;
+        });
+
+        mongoose.connection.on('disconnected', () => {
+            console.log('Database disconnected');
+            isConnected = false;
+        });
 
     } catch (error) {
-        console.error('Database connection failed:', error.message);
+        console.error('Database connection failed:', error);
         isConnected = false;
         throw error;
     }
 };
-
-// Handle connection events for debugging
-mongoose.connection.on('connected', () => {
-    console.log('Mongoose connected to MongoDB');
-    isConnected = true;
-});
-
-mongoose.connection.on('error', (err) => {
-    console.error('Mongoose connection error:', err);
-    isConnected = false;
-});
-
-mongoose.connection.on('disconnected', () => {
-    console.log('Mongoose disconnected');
-    isConnected = false;
-});
