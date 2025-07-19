@@ -6,6 +6,8 @@ import { sendMail } from "../middlewares/emailTransporter.js"
 //sign up
 export const register = async (req, res) => {
     try {
+        console.log('Register endpoint hit:', req.body);
+        
         const { email, password } = req.body
         if (!email || !password) {
             return res.status(400).json({
@@ -13,6 +15,16 @@ export const register = async (req, res) => {
                 success: false
             })
         }
+
+        // Email validation
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({
+                message: "Please provide a valid email address.",
+                success: false
+            });
+        }
+
         const user = await User.findOne({ email })
         if (user) {
             return res.status(409).json({
@@ -20,142 +32,212 @@ export const register = async (req, res) => {
                 success: false
             })
         }
+
         //hash password
         const hashedPassword = await bcrypt.hash(password, 10)
         const otp = Math.floor(100000 + Math.random() * 900000);
-        await sendMail(email ,otp);
+        
+        // Send email first, then save user
+        try {
+            await sendMail(email, otp);
+        } catch (emailError) {
+            console.error('Email sending failed:', emailError);
+            return res.status(500).json({
+                message: "Failed to send verification email. Please try again.",
+                success: false
+            });
+        }
 
         const newUser = new User({
             email,
             password: hashedPassword,
             emailOtp: otp,
-            emailOtpExpiry:new Date(Date.now() + 10 * 60 * 1000),
-            isVerified:false
+            emailOtpExpiry: new Date(Date.now() + 10 * 60 * 1000),
+            isVerified: false
         })
+        
         await newUser.save()
+        
         res.status(201).json({
-            message: "User registered successfully.",
+            message: "User registered successfully. Please check your email for verification code.",
             user: {
                 _id: newUser._id,
                 email: newUser.email
             },
-            success:true
+            success: true
         })
     } catch (error) {
-        console.log(error);
-        res.status(500).json({ error: 'Server error. Please try again later.' });
+        console.error('Registration error:', error);
+        res.status(500).json({ 
+            message: 'Server error. Please try again later.',
+            success: false 
+        });
     }
 }
 
 //verify email
-export const verifyEmail = async (req,res)=>{
+export const verifyEmail = async (req, res) => {
     try {
-        const {email , emailOtp} = req.body
-        if(!email || !emailOtp){
+        console.log('Verify email endpoint hit:', req.body);
+        
+        const { email, emailOtp } = req.body
+        if (!email || !emailOtp) {
             return res.status(400).json({
-                message:'Email and OTP are required',
-                success:false
+                message: 'Email and OTP are required',
+                success: false
             })
         }
-        const user = await User.findOne({email})
-        if(!user){
-            return res.status(404).json({
-                message:'User not found',
-                success:false
-            })
-        }
-        if (user.isVerified) {
-          return res.status(400).json({
-            success: false,
-            message: "User is already verified",
-          });
-        }
-        if(Date.now() > user.emailOtpExpiry){
-            return res.status(400).json({
-            success: false,
-            message: "OTP has expired",
-          });
-        }
-         // Check if OTP matches
-    if (user.emailOtp !== emailOtp) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid OTP",
-      });
-    }
-    // All checks passed – mark as verified
-    user.isVerified = true;
-    user.emailOtp = null;
-    user.emailOtpExpiry = null;
-    await user.save();
 
-    return res.status(200).json({
-      success: true,
-      message: "Email verified successfully",
-    });
+        const user = await User.findOne({ email })
+        if (!user) {
+            return res.status(404).json({
+                message: 'User not found',
+                success: false
+            })
+        }
+
+        if (user.isVerified) {
+            return res.status(400).json({
+                success: false,
+                message: "User is already verified",
+            });
+        }
+
+        if (Date.now() > user.emailOtpExpiry) {
+            return res.status(400).json({
+                success: false,
+                message: "OTP has expired",
+            });
+        }
+
+        // Convert both to numbers for comparison
+        if (parseInt(user.emailOtp) !== parseInt(emailOtp)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid OTP",
+            });
+        }
+
+        // All checks passed – mark as verified
+        user.isVerified = true;
+        user.emailOtp = null;
+        user.emailOtpExpiry = null;
+        await user.save();
+
+        return res.status(200).json({
+            success: true,
+            message: "Email verified successfully",
+        });
 
     } catch (error) {
-        console.log(error);
-        res.status(500).json({ error: 'Server error. Please try again later.' });
+        console.error('Email verification error:', error);
+        res.status(500).json({ 
+            message: 'Server error. Please try again later.',
+            success: false 
+        });
     }
 }
 
-export const resendOtp = async (req,res)=>{
+export const resendOtp = async (req, res) => {
     try {
-        const {email} = req.body;
-        const user = await User.findOne({email})
-        if(!user){
-             return res.status(404).json({
-                message:'User not found',
-                success:false
+        console.log('Resend OTP endpoint hit:', req.body);
+        
+        const { email } = req.body;
+        if (!email) {
+            return res.status(400).json({
+                message: 'Email is required',
+                success: false
+            });
+        }
+
+        const user = await User.findOne({ email })
+        if (!user) {
+            return res.status(404).json({
+                message: 'User not found',
+                success: false
             })
         }
-        //generate new otp again
-       const otp = Math.floor(100000 + Math.random() * 900000);
-       user.emailOtp = otp
-       user.emailOtpExpiry = new Date(Date.now() + 10 * 60 * 1000)
 
-       await user.save()
-       await sendMail(email,otp)
-       return res.status(200).json({
-        message:'Otp sent successfully.',
-        success:true
-       })
+        if (user.isVerified) {
+            return res.status(400).json({
+                message: 'User is already verified',
+                success: false
+            });
+        }
+
+        //generate new otp again
+        const otp = Math.floor(100000 + Math.random() * 900000);
+        user.emailOtp = otp
+        user.emailOtpExpiry = new Date(Date.now() + 10 * 60 * 1000)
+
+        await user.save()
+        
+        try {
+            await sendMail(email, otp)
+        } catch (emailError) {
+            console.error('Email sending failed:', emailError);
+            return res.status(500).json({
+                message: "Failed to send OTP. Please try again.",
+                success: false
+            });
+        }
+
+        return res.status(200).json({
+            message: 'OTP sent successfully.',
+            success: true
+        })
     } catch (error) {
-        console.log(error);
-        res.status(500).json({ error: 'Server error. Please try again later.' });
+        console.error('Resend OTP error:', error);
+        res.status(500).json({ 
+            message: 'Server error. Please try again later.',
+            success: false 
+        });
     }
 }
 
 //login
 export const login = async (req, res) => {
     try {
+        console.log('Login endpoint hit:', req.body);
+        
         const { email, password } = req.body
         if (!email || !password) {
             return res.status(400).json({
                 message: 'Email and password are required.',
-                success:false
+                success: false
             });
         }
+
         const user = await User.findOne({ email });
         if (!user) {
             return res.status(401).json({
-             message: 'Invalid email or password.',
-             success:false
+                message: 'Invalid email or password.',
+                success: false
             });
         }
-        if(!user.isVerified){
-             return res.status(401).json({
-                message: 'Email not verified.',
-                success:false
+
+        if (!user.isVerified) {
+            return res.status(401).json({
+                message: 'Email not verified. Please verify your email first.',
+                success: false
             });
         }
+
         // Compare password
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) {
             return res.status(401).json({
                 message: 'Invalid email or password.',
-                success:false
+                success: false
+            });
+        }
+
+        // Check if SECRET_KEY exists
+        if (!process.env.SECRET_KEY) {
+            console.error('SECRET_KEY environment variable is not set');
+            return res.status(500).json({
+                message: 'Server configuration error.',
+                success: false
             });
         }
 
@@ -163,10 +245,17 @@ export const login = async (req, res) => {
             userId: user._id,
             userEmail: user.email
         }
+
         //generate jwt token
         const token = jwt.sign(tokenData, process.env.SECRET_KEY, { expiresIn: '7d' })
+        
         //send token in cookies
-        res.cookie('token', token, { httpOnly: true, maxAge: 7 * 24 * 60 * 60 * 1000, secure: process.env.NODE_ENV === 'production', sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict', })
+        res.cookie('token', token, { 
+            httpOnly: true, 
+            maxAge: 7 * 24 * 60 * 60 * 1000, 
+            secure: process.env.NODE_ENV === 'production', 
+            sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'strict',
+        })
 
         res.status(200).json({
             message: 'Login Successfully',
@@ -178,9 +267,10 @@ export const login = async (req, res) => {
             success: true
         })
     } catch (error) {
-        console.log(error);
-        res.status(500).json({ error: 'Server error. Please try again later.' });
+        console.error('Login error:', error);
+        res.status(500).json({ 
+            message: 'Server error. Please try again later.',
+            success: false 
+        });
     }
 }
-
-
