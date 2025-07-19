@@ -1,4 +1,4 @@
-/* first can work 
+
 import nodemailer from 'nodemailer'
 import { google } from 'googleapis'
 import dotenv from 'dotenv'
@@ -91,7 +91,7 @@ export const sendMail = async (email, otp) => {
     }
 };
 
-*/
+
 
 /*
 import nodemailer from 'nodemailer'
@@ -242,6 +242,8 @@ export const sendMail = async (email, otp) => {
     }
 };
 */
+
+/*
 import nodemailer from 'nodemailer'
 import { google } from 'googleapis'
 import dotenv from 'dotenv'
@@ -302,3 +304,4 @@ export const sendMail = async (email, otp) => {
     return result;
    
 };
+*/
