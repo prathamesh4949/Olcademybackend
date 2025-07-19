@@ -658,7 +658,7 @@ export const testEmail = async (req, res) => {
         });
     }
 };
-/*
+*/
 import { User } from "../models/User.js"
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
