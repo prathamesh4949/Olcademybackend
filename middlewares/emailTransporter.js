@@ -92,6 +92,8 @@ export const sendMail = async (email, otp) => {
 };
 
 */
+
+/*
 import nodemailer from 'nodemailer'
 import { google } from 'googleapis'
 import dotenv from 'dotenv'
@@ -276,4 +278,54 @@ export const testEmailConfiguration = async () => {
     }
 };
 
+*/
+const nodemailer = require('nodemailer');
 
+const createTransporter = () => {
+  const transporter = nodemailer.createTransporter({
+    service: 'gmail',
+    auth: {
+      type: 'OAuth2',
+      user: process.env.MY_EMAIL,
+      clientId: process.env.CLIENT_ID,
+      clientSecret: process.env.CLIENT_SECRET,
+      refreshToken: process.env.REFRESH_TOKEN,
+    },
+  });
+
+  // Test the connection
+  transporter.verify((error, success) => {
+    if (error) {
+      console.error('Email transporter verification failed:', error);
+    } else {
+      console.log('Email transporter is ready to send emails');
+    }
+  });
+
+  return transporter;
+};
+
+const sendOTPEmail = async (email, otp) => {
+  try {
+    const transporter = createTransporter();
+    
+    const mailOptions = {
+      from: process.env.MY_EMAIL,
+      to: email,
+      subject: 'Your OTP Code',
+      html: `
+        <h2>Your OTP Code</h2>
+        <p>Your verification code is: <strong>${otp}</strong></p>
+        <p>This code will expire in 10 minutes.</p>
+      `,
+    };
+
+    console.log('Sending email to:', email);
+    const result = await transporter.sendMail(mailOptions);
+    console.log('Email sent successfully:', result.messageId);
+    return result;
+  } catch (error) {
+    console.error('Email sending failed:', error);
+    throw error;
+  }
+};
