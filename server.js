@@ -3,6 +3,7 @@ import dotenv from "dotenv"
 import cookieparser from 'cookie-parser'
 import userRoutes from './routes/UserRoutes.js'
 import cors from "cors"
+import mongoose from 'mongoose'
 import { connectDB } from './utils/db.js'
 
 // Load environment variables
@@ -82,6 +83,34 @@ app.use((err, req, res, next) => {
 
 //api routes
 app.use('/user', userRoutes);
+
+// Debug endpoint - REMOVE THIS AFTER TESTING
+app.get("/debug", async (req, res) => {
+    try {
+        await connectDB();
+        res.json({
+            message: "Database connected successfully!",
+            connection: {
+                readyState: mongoose.connection.readyState,
+                name: mongoose.connection.name,
+                host: mongoose.connection.host
+            },
+            env: {
+                hasMongoURI: !!process.env.MONGO_URI,
+                hasDatabaseURL: !!process.env.DATABASE_URL,
+                hasMongoDBURI: !!process.env.MONGODB_URI,
+                nodeEnv: process.env.NODE_ENV
+            },
+            success: true
+        });
+    } catch (error) {
+        res.status(500).json({
+            message: "Database connection failed",
+            error: error.message,
+            success: false
+        });
+    }
+});
 
 // Health check endpoint
 app.get("/", (req, res) => {
