@@ -1,4 +1,4 @@
-/*import nodemailer from 'nodemailer'
+import nodemailer from 'nodemailer'
 import { google } from 'googleapis'
 import dotenv from 'dotenv'
 
@@ -89,7 +89,7 @@ export const sendMail = async (email, otp) => {
         throw new Error(`Failed to send email: ${error.message}`);
     }
 };
-*/
+/*
 import nodemailer from 'nodemailer'
 import { google } from 'googleapis'
 import dotenv from 'dotenv'
@@ -237,3 +237,4 @@ export const sendMail = async (email, otp) => {
         }
     }
 };
+*/
