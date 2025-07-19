@@ -1,27 +1,43 @@
 import mongoose from 'mongoose';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+// Global variable to cache the connection
+let cachedConnection = null;
 
 export const connectDB = async () => {
-  try {
-    // Add connection options for Vercel
-    await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
-      socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
-      maxPoolSize: 10, // Maintain up to 10 socket connections
-      serverSelectionTimeoutMS: 5000, // Keep trying to send operations for 5s
-      bufferMaxEntries: 0, // Disable mongoose buffering
-      bufferCommands: false, // Disable mongoose buffering for commands
-    });
-    
-    console.log('MongoDB connected successfully');
-  } catch (error) {
-    console.error('MongoDB connection failed:', error);
-    throw error; // Let the error bubble up
+  // If we already have a cached connection, return it
+  if (cachedConnection && mongoose.connection.readyState === 1) {
+    console.log('Using cached MongoDB connection');
+    return cachedConnection;
   }
-}
 
-// Handle connection events
+  try {
+    // Configure mongoose for serverless environment
+    mongoose.set('bufferCommands', false);
+    mongoose.set('bufferMaxEntries', 0);
+
+    // Connect with optimized settings for Vercel
+    const connection = await mongoose.connect(process.env.MONGO_URI, {
+      serverSelectionTimeoutMS: 5000, // Reduce from default 30s
+      socketTimeoutMS: 45000,
+      maxPoolSize: 1, // Limit connection pool for serverless
+      bufferCommands: false,
+      bufferMaxEntries: 0,
+    });
+
+    console.log('New MongoDB connection established');
+    cachedConnection = connection;
+    return connection;
+
+  } catch (error) {
+    console.error('MongoDB connection error:', error);
+    throw error;
+  }
+};
+
+// Optional: Add connection event handlers
 mongoose.connection.on('connected', () => {
   console.log('Mongoose connected to MongoDB');
 });
@@ -32,4 +48,5 @@ mongoose.connection.on('error', (err) => {
 
 mongoose.connection.on('disconnected', () => {
   console.log('Mongoose disconnected');
+  cachedConnection = null;
 });
