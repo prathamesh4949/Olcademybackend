@@ -1,51 +1,32 @@
 import mongoose from 'mongoose';
 
 const userSchema = new mongoose.Schema({
+    name: {
+        type: String,
+        required: true,
+        trim: true
+    },
     email: {
         type: String,
-        required: [true, 'Email is required'],
-        unique: true,
+        required: true,
+        unique: true, // Remove this line if you're using schema.index() below
         lowercase: true,
-        trim: true,
-        match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Please enter a valid email']
+        trim: true
     },
     password: {
         type: String,
-        required: [true, 'Password is required'],
-        minlength: [6, 'Password must be at least 6 characters long']
+        required: true
     },
-    emailOtp: {
-        type: Number,
-        default: null
-    },
-    emailOtpExpiry: {
-        type: Date,
-        default: null
-    },
-    isVerified: {
-        type: Boolean,
-        default: false
-    },
-    createdAt: {
-        type: Date,
-        default: Date.now
-    },
-    updatedAt: {
-        type: Date,
-        default: Date.now
-    }
+    // Add other fields as needed
 }, {
     timestamps: true
 });
 
-// Update the updatedAt field before saving
-userSchema.pre('save', function(next) {
-    this.updatedAt = Date.now();
-    next();
-});
+// Only use ONE of these index methods:
+// Option 1: Remove the unique: true from email field and use this:
+// userSchema.index({ email: 1 }, { unique: true });
 
-// Create indexes for better performance
-userSchema.index({ email: 1 });
-userSchema.index({ emailOtpExpiry: 1 });
+// Option 2: Keep unique: true in email field and remove any schema.index() calls
 
-export const User = mongoose.models.User || mongoose.model('User', userSchema);
+const User = mongoose.model('User', userSchema);
+export default User;
