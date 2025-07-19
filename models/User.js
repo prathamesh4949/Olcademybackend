@@ -1,28 +1,51 @@
-import mongoose from 'mongoose'
+import mongoose from 'mongoose';
 
-const userSchemea = mongoose.Schema({
-   
-    email:{
-        type:String,
-        required:true,
-        unique:true
+const userSchema = new mongoose.Schema({
+    email: {
+        type: String,
+        required: [true, 'Email is required'],
+        unique: true,
+        lowercase: true,
+        trim: true,
+        match: [/^[^\s@]+@[^\s@]+\.[^\s@]+$/, 'Please enter a valid email']
     },
-    password:{
-        type:String,
-        required:true,
+    password: {
+        type: String,
+        required: [true, 'Password is required'],
+        minlength: [6, 'Password must be at least 6 characters long']
     },
-    isVerified:{
-        type:Boolean,
-        default:false
+    emailOtp: {
+        type: Number,
+        default: null
     },
-    emailOtp:{
-        type:String,
-        default:''
+    emailOtpExpiry: {
+        type: Date,
+        default: null
     },
-    emailOtpExpiry:{
-        type:Date
+    isVerified: {
+        type: Boolean,
+        default: false
+    },
+    createdAt: {
+        type: Date,
+        default: Date.now
+    },
+    updatedAt: {
+        type: Date,
+        default: Date.now
     }
+}, {
+    timestamps: true
+});
 
-}, {timestamps:true})
+// Update the updatedAt field before saving
+userSchema.pre('save', function(next) {
+    this.updatedAt = Date.now();
+    next();
+});
 
-export const User = mongoose.models.user || mongoose.model('User', userSchemea)
+// Create indexes for better performance
+userSchema.index({ email: 1 });
+userSchema.index({ emailOtpExpiry: 1 });
+
+export const User = mongoose.models.User || mongoose.model('User', userSchema);
