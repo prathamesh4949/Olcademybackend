@@ -305,7 +305,7 @@ export const login = async (req, res) => {
     }
 }
 */
-/* 2 can work 
+
 import { User } from "../models/User.js"
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
@@ -658,7 +658,7 @@ export const testEmail = async (req, res) => {
         });
     }
 };
-*/
+/*
 import { User } from "../models/User.js"
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
@@ -843,5 +843,5 @@ export const login = async (req, res) => {
         res.status(500).json({ error: 'Server error. Please try again later.' });
     }
 }
-
+*/
 
