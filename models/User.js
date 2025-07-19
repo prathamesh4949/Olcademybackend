@@ -1,32 +1,28 @@
-import mongoose from 'mongoose';
+import mongoose from 'mongoose'
 
-const userSchema = new mongoose.Schema({
-    name: {
-        type: String,
-        required: true,
-        trim: true
+const userSchemea = mongoose.Schema({
+   
+    email:{
+        type:String,
+        required:true,
+        unique:true
     },
-    email: {
-        type: String,
-        required: true,
-        unique: true, // Remove this line if you're using schema.index() below
-        lowercase: true,
-        trim: true
+    password:{
+        type:String,
+        required:true,
     },
-    password: {
-        type: String,
-        required: true
+    isVerified:{
+        type:Boolean,
+        default:false
     },
-    // Add other fields as needed
-}, {
-    timestamps: true
-});
+    emailOtp:{
+        type:String,
+        default:''
+    },
+    emailOtpExpiry:{
+        type:Date
+    }
 
-// Only use ONE of these index methods:
-// Option 1: Remove the unique: true from email field and use this:
-// userSchema.index({ email: 1 }, { unique: true });
+}, {timestamps:true})
 
-// Option 2: Keep unique: true in email field and remove any schema.index() calls
-
-const User = mongoose.model('User', userSchema);
-export default User;
+export const User = mongoose.models.user || mongoose.model('User', userSchemea)
