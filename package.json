@@ -2,11 +2,11 @@
   "name": "backend",
   "version": "1.0.0",
   "description": "OLCAcademy Backend API",
-  "main": "server.js",
+  "main": "api/index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js",
-    "dev": "nodemon server.js",
+    "start": "node api/index.js",
+    "dev": "nodemon api/index.js",
     "build": "echo 'Build complete'"
   },
   "keywords": ["express", "api", "vercel"],
@@ -30,4 +30,5 @@
   "engines": {
     "node": ">=18.0.0"
   }
-} 
+}
+
