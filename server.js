@@ -26,7 +26,17 @@ app.use(cors({
 
 // Manual CORS headers for better compatibility
 app.use((req, res, next) => {
-    res.header('Access-Control-Allow-Origin', 'https://olcademyfrontend.vercel.app');
+    const allowedOrigins = [
+        'http://localhost:4028',
+        'https://olcademyfrontend.vercel.app',
+        process.env.FRONTEND_URL
+    ];
+    
+    const origin = req.headers.origin;
+    if (allowedOrigins.includes(origin)) {
+        res.header('Access-Control-Allow-Origin', origin);
+    }
+    
     res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie');
     res.header('Access-Control-Allow-Credentials', 'true');
@@ -36,6 +46,16 @@ app.use((req, res, next) => {
     } else {
         next();
     }
+});
+
+// Add error handling middleware
+app.use((err, req, res, next) => {
+    console.error('Error details:', err);
+    res.status(500).json({
+        message: "Server error. Please try again later.",
+        success: false,
+        error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
 });
 
 //api
