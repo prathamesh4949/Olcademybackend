@@ -2,6 +2,7 @@ import express from 'express'
 import dotenv from "dotenv"
 import cookieparser from 'cookie-parser'
 import userRoutes from './routes/UserRoutes.js'
+import orderRoutes from './routes/OrderRoutes.js'  // Add this line
 import cors from "cors"
 import mongoose from 'mongoose'
 import { connectDB } from './utils/db.js'
@@ -83,6 +84,7 @@ app.use((err, req, res, next) => {
 
 //api routes
 app.use('/user', userRoutes);
+app.use('/order', orderRoutes);  // Add this line
 
 // Debug endpoint - REMOVE THIS AFTER TESTING
 app.get("/debug", async (req, res) => {
