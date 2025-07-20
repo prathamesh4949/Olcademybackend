@@ -1,4 +1,3 @@
-
 import { User } from "../models/User.js"
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
@@ -13,12 +12,27 @@ export const register = async (req, res) => {
         
         console.log('Register endpoint hit:', req.body);
         
-        const { email, password } = req.body
-        if (!email || !password) {
+        const { username, email, password } = req.body
+        if (!username || !email || !password) {
             return res.status(400).json({
                 message: "All fields are required.",
                 success: false
             })
+        }
+
+        // Username validation
+        if (username.length < 3) {
+            return res.status(400).json({
+                message: "Username must be at least 3 characters long.",
+                success: false
+            });
+        }
+
+        if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+            return res.status(400).json({
+                message: "Username can only contain letters, numbers, and underscores.",
+                success: false
+            });
         }
 
         // Email validation
@@ -30,12 +44,32 @@ export const register = async (req, res) => {
             });
         }
 
-        const user = await User.findOne({ email })
-        if (user) {
-            return res.status(409).json({
-                message: "User already exists.",
+        // Password validation
+        if (password.length < 6) {
+            return res.status(400).json({
+                message: "Password must be at least 6 characters long.",
                 success: false
-            })
+            });
+        }
+
+        // Check if user already exists (email or username)
+        const existingUser = await User.findOne({
+            $or: [{ email }, { username }]
+        });
+
+        if (existingUser) {
+            if (existingUser.email === email) {
+                return res.status(409).json({
+                    message: "Email is already registered.",
+                    success: false
+                });
+            }
+            if (existingUser.username === username) {
+                return res.status(409).json({
+                    message: "Username is already taken.",
+                    success: false
+                });
+            }
         }
 
         //hash password
@@ -44,6 +78,7 @@ export const register = async (req, res) => {
         
         // Create user first, then send email
         const newUser = new User({
+            username,
             email,
             password: hashedPassword,
             emailOtp: otp,
@@ -85,6 +120,7 @@ export const register = async (req, res) => {
                 : "User registered successfully, but we couldn't send the verification email. Please try resending the OTP.",
             user: {
                 _id: newUser._id,
+                username: newUser.username,
                 email: newUser.email
             },
             emailSent: emailSent,
@@ -103,8 +139,16 @@ export const register = async (req, res) => {
         }
         
         if (error.code === 11000) {
+            // Handle duplicate key error
+            const field = Object.keys(error.keyPattern)[0];
+            const message = field === 'email' 
+                ? 'Email is already registered.' 
+                : field === 'username' 
+                ? 'Username is already taken.'
+                : 'User already exists.';
+            
             return res.status(409).json({ 
-                message: 'User already exists.',
+                message,
                 success: false 
             });
         }
@@ -112,6 +156,55 @@ export const register = async (req, res) => {
         res.status(500).json({ 
             message: 'Server error. Please try again later.',
             success: false 
+        });
+    }
+}
+
+// Check username availability
+export const checkUsernameAvailability = async (req, res) => {
+    try {
+        await connectDB();
+        
+        const { username } = req.params;
+        
+        if (!username || username.length < 3) {
+            return res.status(400).json({
+                available: false,
+                message: "Username must be at least 3 characters long.",
+                success: false
+            });
+        }
+
+        if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+            return res.status(400).json({
+                available: false,
+                message: "Username can only contain letters, numbers, and underscores.",
+                success: false
+            });
+        }
+
+        const existingUser = await User.findOne({ username });
+        
+        if (existingUser) {
+            return res.status(200).json({
+                available: false,
+                message: "Username is already taken.",
+                success: true
+            });
+        }
+
+        return res.status(200).json({
+            available: true,
+            message: "Username is available.",
+            success: true
+        });
+
+    } catch (error) {
+        console.error('Username availability check error:', error);
+        res.status(500).json({
+            available: false,
+            message: 'Server error. Please try again later.',
+            success: false
         });
     }
 }
@@ -217,7 +310,7 @@ export const resendOtp = async (req, res) => {
         //generate new otp again
         const otp = Math.floor(100000 + Math.random() * 900000);
         user.emailOtp = otp
-        user.emailOtpExpiry = new Date(Date.now() + 10 * 60 * 1000)
+        user.emailOtpExpiry = new Date(Date.now() + 10 * 60 * 60 * 1000)
 
         await user.save()
         console.log('✅ New OTP generated and saved:', otp);
@@ -311,7 +404,8 @@ export const login = async (req, res) => {
 
         const tokenData = {
             userId: user._id,
-            userEmail: user.email
+            userEmail: user.email,
+            username: user.username
         }
 
         //generate jwt token
@@ -329,6 +423,7 @@ export const login = async (req, res) => {
             message: 'Login Successfully',
             user: {
                 id: user._id,
+                username: user.username,
                 email: user.email,
             },
             token,
@@ -384,4 +479,3 @@ export const testEmail = async (req, res) => {
         });
     }
 };
-      

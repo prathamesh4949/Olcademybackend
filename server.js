@@ -1,21 +1,21 @@
-import express from 'express'
-import dotenv from "dotenv"
-import cookieparser from 'cookie-parser'
-import userRoutes from './routes/UserRoutes.js'
-import orderRoutes from './routes/OrderRoutes.js'  // Add this line
-import cors from "cors"
-import mongoose from 'mongoose'
-import { connectDB } from './utils/db.js'
+import express from 'express';
+import dotenv from "dotenv";
+import cookieParser from 'cookie-parser';
+import userRoutes from './routes/UserRoutes.js';
+import orderRoutes from './routes/OrderRoutes.js';
+import cors from "cors";
+import mongoose from 'mongoose';
+import { connectDB } from './utils/db.js';
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
 
-//middlewares
+// Middlewares
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
-app.use(cookieparser())
+app.use(cookieParser());
 
 // CORS configuration for Vercel
 const corsOptions = {
@@ -82,9 +82,9 @@ app.use((err, req, res, next) => {
     });
 });
 
-//api routes
+// API routes
 app.use('/user', userRoutes);
-app.use('/order', orderRoutes);  // Add this line
+app.use('/order', orderRoutes);
 
 // Debug endpoint - REMOVE THIS AFTER TESTING
 app.get("/debug", async (req, res) => {
@@ -131,7 +131,7 @@ app.use('*', (req, res) => {
     });
 });
 
-const PORT = process.env.PORT || 3000
+const PORT = process.env.PORT || 3000;
 
 // For Vercel, we don't need to call listen
 if (process.env.NODE_ENV !== 'production') {

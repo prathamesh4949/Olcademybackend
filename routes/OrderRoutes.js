@@ -7,11 +7,12 @@ import {
     getAllOrders,
     deleteOrder
 } from '../controllers/orderController.js';
+import { authMiddleware } from '../middlewares/authMiddleware.js'; // Import auth middleware
 
 const router = express.Router();
 
-// Create new order
-router.post('/create', createOrder);
+// Create new order (protected)
+router.post('/create', authMiddleware, createOrder);
 
 // Get order by order number
 router.get('/:orderNumber', getOrder);

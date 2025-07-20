@@ -1,28 +1,52 @@
 import mongoose from 'mongoose'
 
-const userSchemea = mongoose.Schema({
-   
-    email:{
-        type:String,
-        required:true,
-        unique:true
+const userSchema = mongoose.Schema({
+    username: {
+        type: String,
+        required: true,
+        unique: true,
+        minlength: 3,
+        trim: true,
+        validate: {
+            validator: function(v) {
+                return /^[a-zA-Z0-9_]+$/.test(v);
+            },
+            message: 'Username can only contain letters, numbers, and underscores'
+        }
     },
-    password:{
-        type:String,
-        required:true,
+    email: {
+        type: String,
+        required: true,
+        unique: true,
+        lowercase: true,
+        trim: true,
+        validate: {
+            validator: function(v) {
+                return /\S+@\S+\.\S+/.test(v);
+            },
+            message: 'Please enter a valid email address'
+        }
     },
-    isVerified:{
-        type:Boolean,
-        default:false
+    password: {
+        type: String,
+        required: true,
+        minlength: 6
     },
-    emailOtp:{
-        type:String,
-        default:''
+    isVerified: {
+        type: Boolean,
+        default: false
     },
-    emailOtpExpiry:{
-        type:Date
+    emailOtp: {
+        type: String,
+        default: ''
+    },
+    emailOtpExpiry: {
+        type: Date
     }
+}, { timestamps: true })
 
-}, {timestamps:true})
+// Create indexes for better performance
+userSchema.index({ email: 1 });
+userSchema.index({ username: 1 });
 
-export const User = mongoose.models.user || mongoose.model('User', userSchemea)
+export const User = mongoose.models.User || mongoose.model('User', userSchema)
