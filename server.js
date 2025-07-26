@@ -1,9 +1,10 @@
+// index.js or app.js (your main server file)
 import express from 'express';
 import dotenv from "dotenv";
 import cookieParser from 'cookie-parser';
 import userRoutes from './routes/UserRoutes.js';
-import orderRoutes from './routes/OrderRoutes.js';
-import cartRoutes from './routes/CartRoutes.js'; // Add this line
+import orderRoutes from './routes/OrderRoutes.js'; // Make sure this import is correct
+import cartRoutes from './routes/CartRoutes.js';
 import cors from "cors";
 import mongoose from 'mongoose';
 import { connectDB } from './utils/db.js';
@@ -18,17 +19,17 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-// CORS configuration for Vercel
+// CORS configuration
 const corsOptions = {
     origin: function (origin, callback) {
-        // Allow requests with no origin (like mobile apps or curl requests)
         if (!origin) return callback(null, true);
         
         const allowedOrigins = [
             "http://localhost:4028",
+            "http://localhost:3000",
             "https://olcademyfrontend.vercel.app",
             process.env.FRONTEND_URL
-        ].filter(Boolean); // Remove undefined values
+        ].filter(Boolean);
         
         if (allowedOrigins.includes(origin)) {
             callback(null, true);
@@ -37,18 +38,19 @@ const corsOptions = {
         }
     },
     credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'x-requested-with'],
     exposedHeaders: ['Set-Cookie']
 };
 
 app.use(cors(corsOptions));
 
-// Additional CORS headers for preflight requests
+// Additional CORS headers
 app.use((req, res, next) => {
     const origin = req.headers.origin;
     const allowedOrigins = [
         "http://localhost:4028",
+        "http://localhost:3000",
         "https://olcademyfrontend.vercel.app",
         process.env.FRONTEND_URL
     ].filter(Boolean);
@@ -57,10 +59,10 @@ app.use((req, res, next) => {
         res.header('Access-Control-Allow-Origin', origin);
     }
     
-    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Cookie, x-requested-with');
     res.header('Access-Control-Allow-Credentials', 'true');
-    res.header('Access-Control-Max-Age', '86400'); // 24 hours
+    res.header('Access-Control-Max-Age', '86400');
     
     if (req.method === 'OPTIONS') {
         res.sendStatus(200);
@@ -69,78 +71,88 @@ app.use((req, res, next) => {
     }
 });
 
-// Test database connection on startup
+// Connect to database
 connectDB().catch(err => {
     console.error('Initial database connection failed:', err);
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-    console.error('Global error handler:', err);
-    res.status(500).json({
-        message: 'Internal server error',
-        success: false
-    });
-});
-
-// API routes
+// API routes - MAKE SURE THESE MATCH YOUR FRONTEND CONSTANTS
 app.use('/user', userRoutes);
-app.use('/order', orderRoutes);
-app.use('/cart', cartRoutes); // Add this line
+app.use('/order', orderRoutes); // This should match your ORDER_API_END_POINT in constants
+app.use('/cart', cartRoutes);
 
-// Debug endpoint - REMOVE THIS AFTER TESTING
-app.get("/debug", async (req, res) => {
+// Test endpoint
+app.get("/test-orders", async (req, res) => {
     try {
-        await connectDB();
+        // Import Order model
+        const { Order } = await import('./models/Order.js');
+        
+        // Get all orders from database
+        const orders = await Order.find().limit(5);
+        
         res.json({
-            message: "Database connected successfully!",
-            connection: {
-                readyState: mongoose.connection.readyState,
-                name: mongoose.connection.name,
-                host: mongoose.connection.host
-            },
-            env: {
-                hasMongoURI: !!process.env.MONGO_URI,
-                hasDatabaseURL: !!process.env.DATABASE_URL,
-                hasMongoDBURI: !!process.env.MONGODB_URI,
-                nodeEnv: process.env.NODE_ENV
-            },
-            success: true
+            success: true,
+            message: "Orders fetched successfully",
+            ordersCount: orders.length,
+            orders: orders,
+            timestamp: new Date().toISOString()
         });
     } catch (error) {
+        console.error('Test orders error:', error);
         res.status(500).json({
-            message: "Database connection failed",
-            error: error.message,
-            success: false
+            success: false,
+            message: "Failed to fetch orders",
+            error: error.message
         });
     }
 });
 
-// Health check endpoint
+// Health check
 app.get("/", (req, res) => {
     res.json({
-        message: "Hello from OLCAcademy backend!",
+        message: "OLCAcademy backend is running!",
         status: "healthy",
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
+        endpoints: {
+            users: "/user",
+            orders: "/order",
+            cart: "/cart"
+        }
     });
 });
 
 // 404 handler
 app.use('*', (req, res) => {
+    console.log('404 - Route not found:', req.method, req.originalUrl);
     res.status(404).json({
         message: 'Route not found',
-        success: false
+        success: false,
+        requestedUrl: req.originalUrl,
+        method: req.method
     });
 });
 
-const PORT = process.env.PORT || 3000;
+// Error handling
+app.use((err, req, res, next) => {
+    console.error('Global error handler:', err);
+    res.status(500).json({
+        message: 'Internal server error',
+        success: false,
+        error: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+    });
+});
 
-// For Vercel, we don't need to call listen
+const PORT = process.env.PORT || 8000;
+
 if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, async () => {
         try {
             await connectDB();
             console.log(`Server running on PORT ${PORT}`);
+            console.log(`Available endpoints:`);
+            console.log(`- Users: http://localhost:${PORT}/user`);
+            console.log(`- Orders: http://localhost:${PORT}/order`);
+            console.log(`- Cart: http://localhost:${PORT}/cart`);
         } catch (error) {
             console.error('Failed to start server:', error);
         }

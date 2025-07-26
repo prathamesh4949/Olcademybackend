@@ -83,7 +83,8 @@ export const register = async (req, res) => {
             password: hashedPassword,
             emailOtp: otp,
             emailOtpExpiry: new Date(Date.now() + 10 * 60 * 1000),
-            isVerified: false
+            isVerified: false,
+            isAdmin: false // Default to false, can be changed directly in database
         })
         
         await newUser.save()
@@ -121,7 +122,8 @@ export const register = async (req, res) => {
             user: {
                 _id: newUser._id,
                 username: newUser.username,
-                email: newUser.email
+                email: newUser.email,
+                isAdmin: newUser.isAdmin
             },
             emailSent: emailSent,
             success: true
@@ -405,7 +407,8 @@ export const login = async (req, res) => {
         const tokenData = {
             userId: user._id,
             userEmail: user.email,
-            username: user.username
+            username: user.username,
+            isAdmin: user.isAdmin // Include isAdmin in token payload
         }
 
         //generate jwt token
@@ -425,6 +428,7 @@ export const login = async (req, res) => {
                 id: user._id,
                 username: user.username,
                 email: user.email,
+                isAdmin: user.isAdmin // Include isAdmin in response
             },
             token,
             success: true
@@ -476,6 +480,40 @@ export const testEmail = async (req, res) => {
             error: error.message,
             stack: error.stack,
             success: false 
+        });
+    }
+};
+
+// Get user profile (protected route)
+export const getUserProfile = async (req, res) => {
+    try {
+        const user = await User.findById(req.user._id).select('-password -emailOtp -emailOtpExpiry');
+        
+        if (!user) {
+            return res.status(404).json({
+                message: 'User not found',
+                success: false
+            });
+        }
+
+        res.status(200).json({
+            message: 'User profile retrieved successfully',
+            user: {
+                id: user._id,
+                username: user.username,
+                email: user.email,
+                isAdmin: user.isAdmin,
+                isVerified: user.isVerified,
+                createdAt: user.createdAt,
+                updatedAt: user.updatedAt
+            },
+            success: true
+        });
+    } catch (error) {
+        console.error('Get user profile error:', error);
+        res.status(500).json({
+            message: 'Server error. Please try again later.',
+            success: false
         });
     }
 };

@@ -36,6 +36,10 @@ const userSchema = mongoose.Schema({
         type: Boolean,
         default: false
     },
+    isAdmin: {
+        type: Boolean,
+        default: false
+    },
     emailOtp: {
         type: String,
         default: ''
@@ -48,5 +52,6 @@ const userSchema = mongoose.Schema({
 // Create indexes for better performance
 userSchema.index({ email: 1 });
 userSchema.index({ username: 1 });
+userSchema.index({ isAdmin: 1 }); // Add index for admin queries
 
 export const User = mongoose.models.User || mongoose.model('User', userSchema)
