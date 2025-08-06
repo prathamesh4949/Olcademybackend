@@ -3,16 +3,20 @@
   "version": "1.0.0",
   "description": "OLCAcademy Backend API",
   "main": "server.js",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "seed": "node scripts/seedDatabase.js",
+    "seed:women": "node scripts/seedWomensProducts.js",
+    "seed:dev": "NODE_ENV=development node scripts/seedDatabase.js",
+    "seed:clear": "node scripts/clearDatabase.js",
+    "test": "echo \"Error: no test specified\" && exit 1",
     "build": "echo 'Build complete'"
   },
-  "keywords": ["express", "api", "vercel"],
+  "keywords": ["express", "api", "vercel", "perfume", "ecommerce"],
   "author": "",
   "license": "ISC",
-  "type": "module",
   "dependencies": {
     "bcrypt": "^5.1.1",
     "cookie-parser": "^1.4.7",
@@ -30,4 +34,4 @@
   "engines": {
     "node": ">=18.0.0"
   }
-} 
+}
