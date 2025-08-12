@@ -62,7 +62,7 @@ const productSchema = new mongoose.Schema({
     type: String,
     lowercase: true
   }],
-  // New fields for detailed product page
+  // Updated sizes array with stock property
   sizes: [{
     size: {
       type: String,
@@ -76,6 +76,11 @@ const productSchema = new mongoose.Schema({
     available: {
       type: Boolean,
       default: true
+    },
+    stock: {
+      type: Number,
+      default: 0,
+      min: 0
     }
   }],
   fragrance_notes: {
@@ -120,9 +125,9 @@ const productSchema = new mongoose.Schema({
 });
 
 // Create text index for search functionality
-productSchema.index({ 
-  name: 'text', 
-  description: 'text' 
+productSchema.index({
+  name: 'text',
+  description: 'text'
 });
 
 // Create index for category and productCollection for faster queries

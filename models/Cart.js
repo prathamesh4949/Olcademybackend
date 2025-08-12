@@ -21,8 +21,16 @@ const cartItemSchema = new mongoose.Schema({
     type: Number,
     default: 1,
     min: 1
+  },
+  selectedSize: {
+    type: String,
+    default: null
+  },
+  personalization: {
+    type: String,
+    default: null
   }
-}, { _id: false }); // Disable _id for subdocuments
+}, { _id: false });
 
 const cartSchema = new mongoose.Schema({
   userId: {
@@ -36,7 +44,6 @@ const cartSchema = new mongoose.Schema({
   timestamps: true 
 });
 
-// Create indexes for better performance
 cartSchema.index({ userId: 1 });
 
 export const Cart = mongoose.models.Cart || mongoose.model('Cart', cartSchema);

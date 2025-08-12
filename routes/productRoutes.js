@@ -20,14 +20,16 @@ const ensureProductSizes = (product) => {
       {
         size: '50ml',
         price: product.price,
-        available: product.stock > 0
+        available: product.stock > 0,
+        stock: product.stock
       }
     ];
   } else {
     // Ensure existing sizes have availability based on stock
     product.sizes = product.sizes.map(size => ({
       ...size,
-      available: size.available !== undefined ? size.available : product.stock > 0
+      stock: size.stock ?? 0,
+      available: size.stock > 0
     }));
   }
   return product;
