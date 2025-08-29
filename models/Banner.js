@@ -1,18 +1,17 @@
-// models/Banner.js
 import mongoose from 'mongoose';
 
 const bannerSchema = new mongoose.Schema({
   type: {
     type: String,
     required: true,
-    enum: ['hero', 'product_highlight', 'collection_highlight'],
+    enum: ['hero', 'product_highlight', 'collection_highlight', 'gift_highlight'], // Added 'gift_highlight'
     index: true
   },
   category: {
     type: String,
     required: true,
     lowercase: true,
-    enum: ['men', 'women', 'unisex'],
+    enum: ['men', 'women', 'unisex', 'gift'], // Added 'gift' for gift page banners
     index: true
   },
   title: {
