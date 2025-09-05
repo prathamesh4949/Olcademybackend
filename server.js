@@ -4,6 +4,7 @@ import cookieParser from 'cookie-parser';
 import userRoutes from './routes/UserRoutes.js';
 import orderRoutes from './routes/OrderRoutes.js';
 import cartRoutes from './routes/CartRoutes.js';
+import wishlistRoutes from './routes/WishlistRoutes.js';  // Add this import
 import productRoutes from './routes/productRoutes.js';
 import bannerRoutes from './routes/bannerRoutes.js';
 import cors from "cors";
@@ -90,8 +91,32 @@ app.use((req, res, next) => {
 app.use('/user', userRoutes);
 app.use('/order', orderRoutes);
 app.use('/cart', cartRoutes);
+app.use('/wishlist', wishlistRoutes);  // Add this line
 app.use('/api/products', productRoutes);
 app.use('/api/banners', bannerRoutes);
+
+// Test endpoint for wishlist
+app.get("/test-wishlist", async (req, res) => {
+    try {
+        const { Wishlist } = await import('./models/Wishlist.js');
+        const wishlists = await Wishlist.find().limit(5);
+        
+        res.json({
+            success: true,
+            message: "Wishlists fetched successfully",
+            wishlistsCount: wishlists.length,
+            wishlists: wishlists,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Test wishlists error:', error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch wishlists",
+            error: error.message
+        });
+    }
+});
 
 // Test endpoint for orders
 app.get("/test-orders", async (req, res) => {
@@ -207,10 +232,12 @@ app.get("/", (req, res) => {
             users: "/user",
             orders: "/order",
             cart: "/cart",
+            wishlist: "/wishlist",  // Add this line
             products: "/api/products",
             banners: "/api/banners",
             testProducts: "/test-products",
             testBanners: "/test-banners",
+            testWishlist: "/test-wishlist",  // Add this line
             images: "/images/",
             debugStatic: "/debug/static"
         }
@@ -265,10 +292,12 @@ app.use('*', (req, res) => {
             '/user',
             '/order', 
             '/cart',
+            '/wishlist',  // Add this line
             '/api/products',
             '/api/banners',
             '/test-products',
             '/test-banners',
+            '/test-wishlist',  // Add this line
             '/debug/routes',
             '/debug/static',
             '/images/'
@@ -297,10 +326,12 @@ if (process.env.NODE_ENV !== 'production') {
             console.log(`- Users: http://localhost:${PORT}/user`);
             console.log(`- Orders: http://localhost:${PORT}/order`);
             console.log(`- Cart: http://localhost:${PORT}/cart`);
+            console.log(`- Wishlist: http://localhost:${PORT}/wishlist`);  // Add this line
             console.log(`- Products: http://localhost:${PORT}/api/products`);
             console.log(`- Banners: http://localhost:${PORT}/api/banners`);
             console.log(`- Test Products: http://localhost:${PORT}/test-products`);
             console.log(`- Test Banners: http://localhost:${PORT}/test-banners`);
+            console.log(`- Test Wishlist: http://localhost:${PORT}/test-wishlist`);  // Add this line
             console.log(`- Debug Routes: http://localhost:${PORT}/debug/routes`);
             console.log(`- Debug Static: http://localhost:${PORT}/debug/static`);
             console.log(`- Images: http://localhost:${PORT}/images/`);
