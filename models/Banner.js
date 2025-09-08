@@ -11,7 +11,7 @@ const bannerSchema = new mongoose.Schema({
     type: String,
     required: true,
     lowercase: true,
-    enum: ['men', 'women', 'unisex', 'gift'], // Added 'gift' for gift page banners
+    enum: ['home' , 'men', 'women', 'unisex', 'gift'], // Added 'gift' for gift page banners
     index: true
   },
   title: {

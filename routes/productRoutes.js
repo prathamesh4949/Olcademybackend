@@ -64,10 +64,10 @@ const ensureProductSizes = (product) => {
   if (!product.sizes || product.sizes.length === 0) {
     product.sizes = [
       {
-        size: '50ml',
+        size: product.volume || '50ml',
         price: product.price,
         available: product.stock > 0,
-        stock: product.stock,
+        stock: product.stock || 0,
       },
     ];
   } else {
@@ -81,11 +81,10 @@ const ensureProductSizes = (product) => {
 };
 
 // Helper function to generate unique SKU
-const generateSKU = (name, category) => {
-  const timestamp = Date.now().toString().slice(-6);
+const generateSKU = (name, category, counter) => {
   const namePrefix = name.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase();
   const categoryPrefix = category.substring(0, 2).toUpperCase();
-  return `${categoryPrefix}${namePrefix}${timestamp}`;
+  return `${namePrefix}-${categoryPrefix}O-H${counter.toString().padStart(3, '0')}`;
 };
 
 // SPECIFIC ROUTES FIRST
@@ -106,8 +105,8 @@ router.get('/search', async (req, res) => {
 
     if (minPrice || maxPrice) {
       filter.price = {};
-      if (minPrice) filter.price.$gte = parseInt(minPrice);
-      if (maxPrice) filter.price.$lte = parseInt(maxPrice);
+      if (minPrice) filter.price.$gte = parseFloat(minPrice);
+      if (maxPrice) filter.price.$lte = parseFloat(maxPrice);
     }
 
     let products = await Product.find(filter).limit(parseInt(limit)).lean();
@@ -294,6 +293,49 @@ router.get('/unisex/collections', async (req, res) => {
   }
 });
 
+// GET /api/products/home/collections - FIXED: Using correct collections for home category
+router.get('/home/collections', async (req, res) => {
+  try {
+    // Using both collection sets to ensure compatibility
+    const collections = ['just-arrived', 'best-sellers', 'huntsman-savile-row', 'fragrant-favourites', 'summer-scents', 'signature-collection'];
+    const result = {};
+
+    console.log('Fetching home collections...');
+
+    for (const collection of collections) {
+      let products = await Product.find({
+        category: 'home',
+        productCollection: collection,
+        isActive: true,
+      })
+        .sort('-createdAt')
+        .limit(6)
+        .lean();
+
+      products = products.map(ensureProductSizes);
+
+      console.log(`Found ${products.length} products for home collection: ${collection}`);
+
+      // Only add collections that have products
+      if (products.length > 0) {
+        result[collection.replace(/-/g, '_')] = products;
+      }
+    }
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error('Error fetching home collections:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Error fetching home collections',
+      error: error.message,
+    });
+  }
+});
+
 // GET /api/products/debug/count
 router.get('/debug/count', async (req, res) => {
   try {
@@ -301,13 +343,14 @@ router.get('/debug/count', async (req, res) => {
 
     const totalProducts = await Product.countDocuments();
     const activeProducts = await Product.countDocuments({ isActive: true });
+    const homeProducts = await Product.countDocuments({ category: 'home' });
     const womenProducts = await Product.countDocuments({ category: 'women' });
     const menProducts = await Product.countDocuments({ category: 'men' });
     const unisexProducts = await Product.countDocuments({ category: 'unisex' });
     const giftProducts = await Product.countDocuments({ category: 'gifts' });
 
     const collectionCounts = {};
-    const collections = ['just-arrived', 'best-sellers', 'huntsman-savile-row'];
+    const collections = ['just-arrived', 'best-sellers', 'huntsman-savile-row', 'fragrant-favourites', 'summer-scents', 'signature-collection'];
     const giftCollections = [
       'for-her',
       'for-him',
@@ -320,6 +363,10 @@ router.get('/debug/count', async (req, res) => {
     ];
 
     for (const collection of collections) {
+      collectionCounts[`home_${collection.replace(/-/g, '_')}`] = await Product.countDocuments({
+        category: 'home',
+        productCollection: collection,
+      });
       collectionCounts[`women_${collection.replace(/-/g, '_')}`] = await Product.countDocuments({
         category: 'women',
         productCollection: collection,
@@ -348,6 +395,9 @@ router.get('/debug/count', async (req, res) => {
     sampleProducts = sampleProducts.map(ensureProductSizes);
 
     const productsByCategory = {
+      home: await Product.find({ category: 'home' }, { _id: 1, name: 1, productCollection: 1, stock: 1, sizes: 1 })
+        .limit(10)
+        .lean(),
       men: await Product.find({ category: 'men' }, { _id: 1, name: 1, productCollection: 1, stock: 1, sizes: 1 })
         .limit(10)
         .lean(),
@@ -373,6 +423,7 @@ router.get('/debug/count', async (req, res) => {
       data: {
         totalProducts,
         activeProducts,
+        homeProducts,
         womenProducts,
         menProducts,
         unisexProducts,
@@ -389,6 +440,14 @@ router.get('/debug/count', async (req, res) => {
           availableSizes: p.sizes.filter((size) => size.available).length,
         })),
         productsByCategory: {
+          home: productsByCategory.home.map((p) => ({
+            _id: p._id.toString(),
+            name: p.name,
+            productCollection: p.productCollection,
+            stock: p.stock,
+            sizes: p.sizes,
+            availableSizes: p.sizes.filter((size) => size.available).length,
+          })),
           men: productsByCategory.men.map((p) => ({
             _id: p._id.toString(),
             name: p.name,
@@ -422,7 +481,7 @@ router.get('/debug/count', async (req, res) => {
             availableSizes: p.sizes.filter((size) => size.available).length,
           })),
         },
-        idFormat: 'Custom 24-character hex strings',
+        idFormat: 'MongoDB ObjectId (24-character hex strings)',
       },
       timestamp: new Date().toISOString(),
     });
@@ -469,7 +528,7 @@ router.get('/debug/exists/:id', async (req, res) => {
       exists: false,
       validId: true,
       error: error.message,
-      id: id,
+      id: req.params.id,
     });
   }
 });
@@ -566,17 +625,25 @@ router.post('/', upload.fields([
     const images = req.files['images'] ? req.files['images'].map((file) => `/images/${file.filename}`) : [];
     const hoverImage = req.files['hoverImage'] ? `/images/${req.files['hoverImage'][0].filename}` : null;
 
-    const sku = generateSKU(name, category);
+    // Generate unique SKU
+    const counter = (await Product.countDocuments()) + 100; // Start at 100 to match format like H122
+    const sku = generateSKU(name, category, counter);
 
     let parsedSizes = [];
     if (sizes) {
       try {
         parsedSizes = typeof sizes === 'string' ? JSON.parse(sizes) : sizes;
+        parsedSizes = parsedSizes.map(size => ({
+          size: size.size || volume || '50ml',
+          price: Number(size.price) || Number(price),
+          available: size.available !== undefined ? size.available : (Number(size.stock) || 0) > 0,
+          stock: Number(size.stock) || 0,
+        }));
       } catch (error) {
         console.error('Error parsing sizes:', error);
         parsedSizes = [
           {
-            size: '50ml',
+            size: volume || '50ml',
             price: Number(price),
             available: true,
             stock: Number(stock) || 0,
@@ -586,7 +653,7 @@ router.post('/', upload.fields([
     } else {
       parsedSizes = [
         {
-          size: '50ml',
+          size: volume || '50ml',
           price: Number(price),
           available: true,
           stock: Number(stock) || 0,
@@ -594,13 +661,17 @@ router.post('/', upload.fields([
       ];
     }
 
-    let parsedFragranceNotes = {};
+    let parsedFragranceNotes = { top: [], middle: [], base: [] };
     if (fragrance_notes) {
       try {
         parsedFragranceNotes = typeof fragrance_notes === 'string' ? JSON.parse(fragrance_notes) : fragrance_notes;
+        parsedFragranceNotes = {
+          top: Array.isArray(parsedFragranceNotes.top) ? parsedFragranceNotes.top : [],
+          middle: Array.isArray(parsedFragranceNotes.middle) ? parsedFragranceNotes.middle : [],
+          base: Array.isArray(parsedFragranceNotes.base) ? parsedFragranceNotes.base : [],
+        };
       } catch (error) {
         console.error('Error parsing fragrance notes:', error);
-        parsedFragranceNotes = { top: [], middle: [], base: [] };
       }
     }
 
@@ -608,6 +679,11 @@ router.post('/', upload.fields([
     if (personalization) {
       try {
         parsedPersonalization = typeof personalization === 'string' ? JSON.parse(personalization) : personalization;
+        parsedPersonalization = {
+          available: parsedPersonalization.available || false,
+          max_characters: Number(parsedPersonalization.max_characters) || 15,
+          price: Number(parsedPersonalization.price) || 0,
+        };
       } catch (error) {
         console.error('Error parsing personalization:', error);
       }
@@ -636,8 +712,10 @@ router.post('/', upload.fields([
       concentration: concentration ? concentration.trim() : undefined,
       longevity: longevity ? longevity.trim() : undefined,
       sillage: sillage ? sillage.trim() : undefined,
-      season: season ? (Array.isArray(season) ? season : season.split(',').map((s) => s.trim())) : [],
-      occasion: occasion ? (Array.isArray(occasion) ? occasion : occasion.split(',').map((o) => o.trim())) : [],
+      season: season ? (Array.isArray(season) ? season : season.split(',').map((s) => s.trim().toLowerCase())) : [],
+      occasion: occasion ? (Array.isArray(occasion) ? occasion : occasion.split(',').map((o) => o.trim().toLowerCase())) : [],
+      createdAt: new Date(),
+      updatedAt: new Date(),
     };
 
     const product = new Product(productData);
@@ -680,7 +758,7 @@ router.post('/', upload.fields([
 
 // PARAMETERIZED ROUTES
 
-// GET /api/products/:id
+// GET /api/products/:id - FIXED: Using correct response structure for detail page
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -707,10 +785,11 @@ router.get('/:id', async (req, res) => {
 
     console.log('Product found:', product._id);
 
+    // IMPORTANT: Using the structure that works with your detail page
     res.json({
       success: true,
       data: {
-        product: product,
+        product: product,  // Wrapping product in data.product structure
       },
     });
   } catch (error) {
@@ -778,7 +857,6 @@ router.put('/:id', upload.fields([
       const newHoverImage = `/images/${req.files['hoverImage'][0].filename}`;
       updateData.hoverImage = newHoverImage;
 
-      // Delete old hover image if it exists
       if (existingProduct.hoverImage) {
         const fullPath = path.join(__dirname, '../../public', existingProduct.hoverImage);
         if (fs.existsSync(fullPath)) {
@@ -791,7 +869,6 @@ router.put('/:id', upload.fields([
         }
       }
     } else if (req.body.keepExistingImages === 'false' && !req.files['images']) {
-      // If replacing images but no new images uploaded, clear hoverImage
       updateData.hoverImage = null;
       if (existingProduct.hoverImage) {
         const fullPath = path.join(__dirname, '../../public', existingProduct.hoverImage);
@@ -810,6 +887,12 @@ router.put('/:id', upload.fields([
     if (updateData.sizes && typeof updateData.sizes === 'string') {
       try {
         updateData.sizes = JSON.parse(updateData.sizes);
+        updateData.sizes = updateData.sizes.map(size => ({
+          size: size.size || existingProduct.volume || '50ml',
+          price: Number(size.price) || Number(updateData.price) || existingProduct.price,
+          available: size.available !== undefined ? size.available : (Number(size.stock) || 0) > 0,
+          stock: Number(size.stock) || 0,
+        }));
       } catch (error) {
         console.error('Error parsing sizes:', error);
       }
@@ -818,6 +901,11 @@ router.put('/:id', upload.fields([
     if (updateData.fragrance_notes && typeof updateData.fragrance_notes === 'string') {
       try {
         updateData.fragrance_notes = JSON.parse(updateData.fragrance_notes);
+        updateData.fragrance_notes = {
+          top: Array.isArray(updateData.fragrance_notes.top) ? updateData.fragrance_notes.top : [],
+          middle: Array.isArray(updateData.fragrance_notes.middle) ? updateData.fragrance_notes.middle : [],
+          base: Array.isArray(updateData.fragrance_notes.base) ? updateData.fragrance_notes.base : [],
+        };
       } catch (error) {
         console.error('Error parsing fragrance notes:', error);
       }
@@ -826,6 +914,11 @@ router.put('/:id', upload.fields([
     if (updateData.personalization && typeof updateData.personalization === 'string') {
       try {
         updateData.personalization = JSON.parse(updateData.personalization);
+        updateData.personalization = {
+          available: updateData.personalization.available || false,
+          max_characters: Number(updateData.personalization.max_characters) || 15,
+          price: Number(updateData.personalization.price) || 0,
+        };
       } catch (error) {
         console.error('Error parsing personalization:', error);
       }
@@ -836,11 +929,11 @@ router.put('/:id', upload.fields([
     }
 
     if (updateData.season && typeof updateData.season === 'string') {
-      updateData.season = updateData.season.split(',').map((s) => s.trim());
+      updateData.season = updateData.season.split(',').map((s) => s.trim().toLowerCase());
     }
 
     if (updateData.occasion && typeof updateData.occasion === 'string') {
-      updateData.occasion = updateData.occasion.split(',').map((o) => o.trim());
+      updateData.occasion = updateData.occasion.split(',').map((o) => o.trim().toLowerCase());
     }
 
     // Convert numeric fields
@@ -855,6 +948,8 @@ router.put('/:id', upload.fields([
     // Ensure lowercase for category and collection
     if (updateData.category) updateData.category = updateData.category.toLowerCase();
     if (updateData.productCollection) updateData.productCollection = updateData.productCollection.toLowerCase();
+
+    updateData.updatedAt = new Date();
 
     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
 
@@ -978,6 +1073,7 @@ router.post('/:id/toggle-status', async (req, res) => {
     }
 
     product.isActive = !product.isActive;
+    product.updatedAt = new Date();
     await product.save();
 
     res.json({
@@ -1027,10 +1123,15 @@ router.delete('/:id/image/:index', async (req, res) => {
     const fullPath = path.join(__dirname, '../../public', imagePath);
 
     if (fs.existsSync(fullPath)) {
-      fs.unlinkSync(fullPath);
+      try {
+        fs.unlinkSync(fullPath);
+      } catch (error) {
+        console.error('Error deleting image:', fullPath, error);
+      }
     }
 
     product.images.splice(imageIndex, 1);
+    product.updatedAt = new Date();
     await product.save();
 
     res.json({
@@ -1086,6 +1187,7 @@ router.delete('/:id/hover-image', async (req, res) => {
     }
 
     product.hoverImage = null;
+    product.updatedAt = new Date();
     await product.save();
 
     res.json({
