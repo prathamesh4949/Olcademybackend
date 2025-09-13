@@ -4,8 +4,9 @@ import cookieParser from 'cookie-parser';
 import userRoutes from './routes/UserRoutes.js';
 import orderRoutes from './routes/OrderRoutes.js';
 import cartRoutes from './routes/CartRoutes.js';
-import wishlistRoutes from './routes/WishlistRoutes.js';  // Add this import
+import wishlistRoutes from './routes/WishlistRoutes.js';
 import productRoutes from './routes/productRoutes.js';
+import scentRoutes from './routes/scentRoutes.js';
 import bannerRoutes from './routes/bannerRoutes.js';
 import cors from "cors";
 import mongoose from 'mongoose';
@@ -91,11 +92,308 @@ app.use((req, res, next) => {
 app.use('/user', userRoutes);
 app.use('/order', orderRoutes);
 app.use('/cart', cartRoutes);
-app.use('/wishlist', wishlistRoutes);  // Add this line
+app.use('/wishlist', wishlistRoutes);
 app.use('/api/products', productRoutes);
+app.use('/api/scents', scentRoutes);
 app.use('/api/banners', bannerRoutes);
 
-// Test endpoint for wishlist
+// Test endpoint for scents
+app.get("/test-scents", async (req, res) => {
+    try {
+        const { default: Scent } = await import('./models/Scent.js');
+        const scents = await Scent.find().limit(5);
+        
+        res.json({
+            success: true,
+            message: "Scents fetched successfully",
+            scentsCount: scents.length,
+            scents: scents,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Test scents error:', error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch scents",
+            error: error.message
+        });
+    }
+});
+
+// Test endpoint for trending scents
+app.get("/test-trending", async (req, res) => {
+    try {
+        const { default: Scent } = await import('./models/Scent.js');
+        const trendingScents = await Scent.find({ collection: 'trending' }).limit(5);
+        
+        res.json({
+            success: true,
+            message: "Trending scents fetched successfully",
+            count: trendingScents.length,
+            scents: trendingScents,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Test trending scents error:', error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch trending scents",
+            error: error.message
+        });
+    }
+});
+
+// Test endpoint for best seller scents
+app.get("/test-bestsellers", async (req, res) => {
+    try {
+        const { default: Scent } = await import('./models/Scent.js');
+        const bestSellerScents = await Scent.find({ collection: 'best-seller' }).limit(5);
+        
+        res.json({
+            success: true,
+            message: "Best seller scents fetched successfully",
+            count: bestSellerScents.length,
+            scents: bestSellerScents,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Test best seller scents error:', error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch best seller scents",
+            error: error.message
+        });
+    }
+});
+
+// Test endpoint for womens signature scents (using 'signature' collection)
+app.get("/test-womens-signature", async (req, res) => {
+    try {
+        const { default: Scent } = await import('./models/Scent.js');
+        const womensSignatureScents = await Scent.find({ collection: 'signature' }).limit(5);
+        
+        res.json({
+            success: true,
+            message: "Women's signature scents fetched successfully",
+            count: womensSignatureScents.length,
+            scents: womensSignatureScents,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Test womens signature scents error:', error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch women's signature scents",
+            error: error.message
+        });
+    }
+});
+
+// Test endpoint for rose garden essence scents
+app.get("/test-rose-garden-essence", async (req, res) => {
+    try {
+        const { default: Scent } = await import('./models/Scent.js');
+        const roseGardenEssenceScents = await Scent.find({ collection: 'rose-garden-essence' }).limit(5);
+        
+        res.json({
+            success: true,
+            message: "Rose garden essence scents fetched successfully",
+            count: roseGardenEssenceScents.length,
+            scents: roseGardenEssenceScents,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Test rose garden essence scents error:', error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch rose garden essence scents",
+            error: error.message
+        });
+    }
+});
+
+// Test endpoint for mens signature scents
+app.get("/test-mens-signature", async (req, res) => {
+    try {
+        const { default: Scent } = await import('./models/Scent.js');
+        const mensSignatureScents = await Scent.find({ collection: 'mens-signature' }).limit(5);
+        
+        res.json({
+            success: true,
+            message: "Men's signature scents fetched successfully",
+            count: mensSignatureScents.length,
+            scents: mensSignatureScents,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Test mens signature scents error:', error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch men's signature scents",
+            error: error.message
+        });
+    }
+});
+
+// Test endpoint for orange marmalade scents
+app.get("/test-orange-marmalade", async (req, res) => {
+    try {
+        const { default: Scent } = await import('./models/Scent.js');
+        const orangeMarmaladeScents = await Scent.find({ collection: 'orange-marmalade' }).limit(5);
+        
+        res.json({
+            success: true,
+            message: "Orange marmalade scents fetched successfully",
+            count: orangeMarmaladeScents.length,
+            scents: orangeMarmaladeScents,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Test orange marmalade scents error:', error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch orange marmalade scents",
+            error: error.message
+        });
+    }
+});
+
+// Test endpoint for gender-free scents
+app.get("/test-gender-free", async (req, res) => {
+    try {
+        const { default: Scent } = await import('./models/Scent.js');
+        const genderFreeScents = await Scent.find({ collection: 'gender-free' }).limit(5);
+        
+        res.json({
+            success: true,
+            message: "Gender-free scents fetched successfully",
+            count: genderFreeScents.length,
+            scents: genderFreeScents,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Test gender-free scents error:', error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch gender-free scents",
+            error: error.message
+        });
+    }
+});
+
+// Test endpoint for limitless scents
+app.get("/test-limitless", async (req, res) => {
+    try {
+        const { default: Scent } = await import('./models/Scent.js');
+        const limitlessScents = await Scent.find({ collection: 'limitless' }).limit(5);
+        
+        res.json({
+            success: true,
+            message: "Limitless scents fetched successfully",
+            count: limitlessScents.length,
+            scents: limitlessScents,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Test limitless scents error:', error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch limitless scents",
+            error: error.message
+        });
+    }
+});
+
+// NEW: Test endpoints for gift collections
+app.get("/test-perfect-discover-gifts", async (req, res) => {
+    try {
+        const { default: Scent } = await import('./models/Scent.js');
+        const perfectDiscoverGifts = await Scent.find({ collection: 'perfect-discover-gifts' }).limit(5);
+        
+        res.json({
+            success: true,
+            message: "Perfect discover gifts scents fetched successfully",
+            count: perfectDiscoverGifts.length,
+            scents: perfectDiscoverGifts,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Test perfect discover gifts scents error:', error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch perfect discover gifts scents",
+            error: error.message
+        });
+    }
+});
+
+app.get("/test-perfect-gifts-premium", async (req, res) => {
+    try {
+        const { default: Scent } = await import('./models/Scent.js');
+        const perfectGiftsPremium = await Scent.find({ collection: 'perfect-gifts-premium' }).limit(5);
+        
+        res.json({
+            success: true,
+            message: "Perfect gifts premium scents fetched successfully",
+            count: perfectGiftsPremium.length,
+            scents: perfectGiftsPremium,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Test perfect gifts premium scents error:', error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch perfect gifts premium scents",
+            error: error.message
+        });
+    }
+});
+
+app.get("/test-perfect-gifts-luxury", async (req, res) => {
+    try {
+        const { default: Scent } = await import('./models/Scent.js');
+        const perfectGiftsLuxury = await Scent.find({ collection: 'perfect-gifts-luxury' }).limit(5);
+        
+        res.json({
+            success: true,
+            message: "Perfect gifts luxury scents fetched successfully",
+            count: perfectGiftsLuxury.length,
+            scents: perfectGiftsLuxury,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Test perfect gifts luxury scents error:', error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch perfect gifts luxury scents",
+            error: error.message
+        });
+    }
+});
+
+app.get("/test-home-decor-gifts", async (req, res) => {
+    try {
+        const { default: Scent } = await import('./models/Scent.js');
+        const homeDecorGifts = await Scent.find({ collection: 'home-decor-gifts' }).limit(5);
+        
+        res.json({
+            success: true,
+            message: "Home decor gifts scents fetched successfully",
+            count: homeDecorGifts.length,
+            scents: homeDecorGifts,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Test home decor gifts scents error:', error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch home decor gifts scents",
+            error: error.message
+        });
+    }
+});
+
+// Test endpoint for wishlists
 app.get("/test-wishlist", async (req, res) => {
     try {
         const { Wishlist } = await import('./models/Wishlist.js');
@@ -222,7 +520,7 @@ app.get("/debug/static", async (req, res) => {
     }
 });
 
-// Health check
+// Health check - Updated with new gift collection endpoints
 app.get("/", (req, res) => {
     res.json({
         message: "OLCAcademy backend is running!",
@@ -232,12 +530,27 @@ app.get("/", (req, res) => {
             users: "/user",
             orders: "/order",
             cart: "/cart",
-            wishlist: "/wishlist",  // Add this line
+            wishlist: "/wishlist",
             products: "/api/products",
+            scents: "/api/scents",
             banners: "/api/banners",
             testProducts: "/test-products",
+            testScents: "/test-scents",
+            testTrending: "/test-trending",
+            testBestSellers: "/test-bestsellers",
+            testWomensSignature: "/test-womens-signature",
+            testRoseGardenEssence: "/test-rose-garden-essence",
+            testMensSignature: "/test-mens-signature",
+            testOrangeMarmalade: "/test-orange-marmalade",
+            testGenderFree: "/test-gender-free",
+            testLimitless: "/test-limitless",
+            // NEW: Gift collection test endpoints
+            testPerfectDiscoverGifts: "/test-perfect-discover-gifts",
+            testPerfectGiftsPremium: "/test-perfect-gifts-premium",
+            testPerfectGiftsLuxury: "/test-perfect-gifts-luxury",
+            testHomeDecorGifts: "/test-home-decor-gifts",
             testBanners: "/test-banners",
-            testWishlist: "/test-wishlist",  // Add this line
+            testWishlist: "/test-wishlist",
             images: "/images/",
             debugStatic: "/debug/static"
         }
@@ -277,7 +590,7 @@ app.get("/debug/routes", (req, res) => {
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 app.get('/.well-known/*', (req, res) => res.status(204).end());
 
-// 404 handler - MUST be AFTER all route definitions
+// 404 handler - MUST be AFTER all route definitions - Updated with new gift collection endpoints
 app.use('*', (req, res) => {
     if (!req.originalUrl.includes('favicon') && !req.originalUrl.includes('.well-known')) {
         console.log('404 - Route not found:', req.method, req.originalUrl);
@@ -292,12 +605,27 @@ app.use('*', (req, res) => {
             '/user',
             '/order', 
             '/cart',
-            '/wishlist',  // Add this line
+            '/wishlist',
             '/api/products',
+            '/api/scents',
             '/api/banners',
             '/test-products',
+            '/test-scents',
+            '/test-trending',
+            '/test-bestsellers',
+            '/test-womens-signature',
+            '/test-rose-garden-essence',
+            '/test-mens-signature',
+            '/test-orange-marmalade',
+            '/test-gender-free',
+            '/test-limitless',
+            // NEW: Gift collection endpoints
+            '/test-perfect-discover-gifts',
+            '/test-perfect-gifts-premium',
+            '/test-perfect-gifts-luxury',
+            '/test-home-decor-gifts',
             '/test-banners',
-            '/test-wishlist',  // Add this line
+            '/test-wishlist',
             '/debug/routes',
             '/debug/static',
             '/images/'
@@ -317,6 +645,7 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 8000;
 
+// Updated development server console logs with new gift collection endpoints
 if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, async () => {
         try {
@@ -326,12 +655,27 @@ if (process.env.NODE_ENV !== 'production') {
             console.log(`- Users: http://localhost:${PORT}/user`);
             console.log(`- Orders: http://localhost:${PORT}/order`);
             console.log(`- Cart: http://localhost:${PORT}/cart`);
-            console.log(`- Wishlist: http://localhost:${PORT}/wishlist`);  // Add this line
+            console.log(`- Wishlist: http://localhost:${PORT}/wishlist`);
             console.log(`- Products: http://localhost:${PORT}/api/products`);
+            console.log(`- Scents: http://localhost:${PORT}/api/scents`);
             console.log(`- Banners: http://localhost:${PORT}/api/banners`);
             console.log(`- Test Products: http://localhost:${PORT}/test-products`);
+            console.log(`- Test Scents: http://localhost:${PORT}/test-scents`);
+            console.log(`- Test Trending: http://localhost:${PORT}/test-trending`);
+            console.log(`- Test Best Sellers: http://localhost:${PORT}/test-bestsellers`);
+            console.log(`- Test Women's Signature: http://localhost:${PORT}/test-womens-signature`);
+            console.log(`- Test Rose Garden Essence: http://localhost:${PORT}/test-rose-garden-essence`);
+            console.log(`- Test Men's Signature: http://localhost:${PORT}/test-mens-signature`);
+            console.log(`- Test Orange Marmalade: http://localhost:${PORT}/test-orange-marmalade`);
+            console.log(`- Test Gender-Free: http://localhost:${PORT}/test-gender-free`);
+            console.log(`- Test Limitless: http://localhost:${PORT}/test-limitless`);
+            // NEW: Gift collection endpoints
+            console.log(`- Test Perfect Discover Gifts: http://localhost:${PORT}/test-perfect-discover-gifts`);
+            console.log(`- Test Perfect Gifts Premium: http://localhost:${PORT}/test-perfect-gifts-premium`);
+            console.log(`- Test Perfect Gifts Luxury: http://localhost:${PORT}/test-perfect-gifts-luxury`);
+            console.log(`- Test Home Decor Gifts: http://localhost:${PORT}/test-home-decor-gifts`);
             console.log(`- Test Banners: http://localhost:${PORT}/test-banners`);
-            console.log(`- Test Wishlist: http://localhost:${PORT}/test-wishlist`);  // Add this line
+            console.log(`- Test Wishlist: http://localhost:${PORT}/test-wishlist`);
             console.log(`- Debug Routes: http://localhost:${PORT}/debug/routes`);
             console.log(`- Debug Static: http://localhost:${PORT}/debug/static`);
             console.log(`- Images: http://localhost:${PORT}/images/`);
