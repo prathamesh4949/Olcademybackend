@@ -10,6 +10,8 @@ import scentRoutes from './routes/scentRoutes.js';
 import bannerRoutes from './routes/bannerRoutes.js';
 import cors from "cors";
 import mongoose from 'mongoose';
+import path from 'path';
+import fs from 'fs';
 import { connectDB } from './utils/db.js';
 
 // Load environment variables
@@ -74,7 +76,21 @@ app.use((req, res, next) => {
     }
 });
 
-// 🔥 STATIC FILES - Serve images from public directory
+// Ensure public/images directory exists
+const publicPath = path.join(process.cwd(), 'public');
+const imagesPath = path.join(publicPath, 'images');
+
+if (!fs.existsSync(publicPath)) {
+    fs.mkdirSync(publicPath, { recursive: true });
+    console.log('📁 Created public directory');
+}
+
+if (!fs.existsSync(imagesPath)) {
+    fs.mkdirSync(imagesPath, { recursive: true });
+    console.log('📁 Created public/images directory');
+}
+
+// 🔥 STATIC FILES - Serve images from public directory (same as products)
 app.use(express.static('public'));
 
 // Connect to database
@@ -115,6 +131,51 @@ app.get("/test-scents", async (req, res) => {
         res.status(500).json({
             success: false,
             message: "Failed to fetch scents",
+            error: error.message
+        });
+    }
+});
+
+// Test scent creation endpoint
+app.get("/test-scent-creation", async (req, res) => {
+    try {
+        const { default: Scent } = await import('./models/Scent.js');
+        
+        // Create a test scent
+        const testScent = new Scent({
+            name: 'Test Scent ' + Date.now(),
+            description: 'This is a test scent created automatically',
+            price: 99.99,
+            category: 'women',
+            collection: 'trending',
+            sku: 'TEST' + Date.now(),
+            scentFamily: 'floral',
+            stock: 50,
+            isActive: true,
+            fragrance_notes: {
+                top: ['Rose', 'Bergamot'],
+                middle: ['Jasmine', 'Lily'],
+                base: ['Sandalwood', 'Musk']
+            },
+            sizes: [
+                { size: '50ml', price: 99.99, stock: 20, available: true },
+                { size: '100ml', price: 149.99, stock: 30, available: true }
+            ]
+        });
+        
+        const savedScent = await testScent.save();
+        
+        res.json({
+            success: true,
+            message: "Test scent created successfully",
+            scent: savedScent,
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error('Test scent creation error:', error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to create test scent",
             error: error.message
         });
     }
@@ -488,14 +549,12 @@ app.get("/test-banners", async (req, res) => {
 // Debug static files
 app.get("/debug/static", async (req, res) => {
     try {
-        const fs = await import('fs');
-        const path = await import('path');
-        
         const publicPath = path.join(process.cwd(), 'public');
         const imagesPath = path.join(publicPath, 'images');
         
         const publicExists = fs.existsSync(publicPath);
         const imagesExists = fs.existsSync(imagesPath);
+        
         const imageFiles = imagesExists ? fs.readdirSync(imagesPath) : [];
         
         res.json({
@@ -509,8 +568,12 @@ app.get("/debug/static", async (req, res) => {
                 public: publicExists,
                 images: imagesExists
             },
-            imageFiles: imageFiles.slice(0, 10),
-            sampleImageUrl: imageFiles.length > 0 ? `/images/${imageFiles[0]}` : 'No images found'
+            files: {
+                imageFiles: imageFiles.slice(0, 20)
+            },
+            sampleUrls: {
+                imageUrl: imageFiles.length > 0 ? `/images/${imageFiles[0]}` : 'No images found'
+            }
         });
     } catch (error) {
         res.json({
@@ -536,6 +599,7 @@ app.get("/", (req, res) => {
             banners: "/api/banners",
             testProducts: "/test-products",
             testScents: "/test-scents",
+            testScentCreation: "/test-scent-creation",
             testTrending: "/test-trending",
             testBestSellers: "/test-bestsellers",
             testWomensSignature: "/test-womens-signature",
@@ -611,6 +675,7 @@ app.use('*', (req, res) => {
             '/api/banners',
             '/test-products',
             '/test-scents',
+            '/test-scent-creation',
             '/test-trending',
             '/test-bestsellers',
             '/test-womens-signature',
@@ -661,6 +726,7 @@ if (process.env.NODE_ENV !== 'production') {
             console.log(`- Banners: http://localhost:${PORT}/api/banners`);
             console.log(`- Test Products: http://localhost:${PORT}/test-products`);
             console.log(`- Test Scents: http://localhost:${PORT}/test-scents`);
+            console.log(`- Test Scent Creation: http://localhost:${PORT}/test-scent-creation`);
             console.log(`- Test Trending: http://localhost:${PORT}/test-trending`);
             console.log(`- Test Best Sellers: http://localhost:${PORT}/test-bestsellers`);
             console.log(`- Test Women's Signature: http://localhost:${PORT}/test-womens-signature`);
@@ -679,6 +745,7 @@ if (process.env.NODE_ENV !== 'production') {
             console.log(`- Debug Routes: http://localhost:${PORT}/debug/routes`);
             console.log(`- Debug Static: http://localhost:${PORT}/debug/static`);
             console.log(`- Images: http://localhost:${PORT}/images/`);
+            console.log(`📁 Using public/images directory for both products and scents`);
         } catch (error) {
             console.error('Failed to start server:', error);
         }

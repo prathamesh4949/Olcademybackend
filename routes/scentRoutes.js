@@ -1,4 +1,3 @@
-// routes/scentRoutes.js
 import express from 'express';
 import {
   getAllScents,
@@ -23,7 +22,7 @@ router.get('/collection/:collection', getScentsByCollection);
 router.get('/brand/:brand', getScentsByBrand);
 router.get('/:id', getScentById);
 
-// Admin routes (you can add authentication middleware later)
+// Admin routes (with file upload handling built into controllers)
 router.post('/', createScent);
 router.put('/:id', updateScent);
 router.delete('/:id', deleteScent);

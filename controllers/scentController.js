@@ -1,4 +1,45 @@
 import Scent from '../models/Scent.js';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
+
+// Configure multer for file uploads - preserve original filename
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    const uploadPath = 'public/images/';
+    
+    // Create directory if it doesn't exist
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
+    }
+    
+    cb(null, uploadPath);
+  },
+  filename: function (req, file, cb) {
+    // Use original filename directly without any modifications
+    cb(null, file.originalname);
+  }
+});
+
+const fileFilter = (req, file, cb) => {
+  // Check file type
+  if (file.mimetype.startsWith('image/')) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files are allowed!'), false);
+  }
+};
+
+export const upload = multer({ 
+  storage: storage,
+  fileFilter: fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit per file
+  }
+}).fields([
+  { name: 'images', maxCount: 5 },
+  { name: 'hoverImage', maxCount: 1 }
+]);
 
 // Get all scents with optional filters
 export const getAllScents = async (req, res) => {
@@ -10,7 +51,7 @@ export const getAllScents = async (req, res) => {
       minPrice, 
       maxPrice, 
       inStock,
-      isActive = true,
+      isActive,
       isNew, 
       isFeatured,
       featured,
@@ -23,7 +64,7 @@ export const getAllScents = async (req, res) => {
       concentration,
       search,
       page = 1, 
-      limit = 20,
+      limit = 1000,
       sortBy = 'createdAt',
       sortOrder = 'desc'
     } = req.query;
@@ -43,12 +84,12 @@ export const getAllScents = async (req, res) => {
     if (season) filter.season = { $in: [season.toLowerCase()] };
     if (occasion) filter.occasion = { $in: [occasion.toLowerCase()] };
     
-    // Boolean filters
-    if (isActive !== undefined) filter.isActive = isActive === 'true';
-    if (inStock !== undefined) filter.inStock = inStock === 'true';
-    if (isNew !== undefined) filter.isNew = isNew === 'true';
-    if (isFeatured !== undefined) filter.isFeatured = isFeatured === 'true';
-    if (featured !== undefined) filter.featured = featured === 'true';
+    // Boolean filters - handle string 'true'/'false' from query params
+    if (isActive !== undefined) filter.isActive = isActive === 'true' || isActive === true;
+    if (inStock !== undefined) filter.inStock = inStock === 'true' || inStock === true;
+    if (isNew !== undefined) filter.isNew = isNew === 'true' || isNew === true;
+    if (isFeatured !== undefined) filter.isFeatured = isFeatured === 'true' || isFeatured === true;
+    if (featured !== undefined) filter.featured = featured === 'true' || featured === true;
     
     // Price range filter
     if (minPrice || maxPrice) {
@@ -59,16 +100,19 @@ export const getAllScents = async (req, res) => {
 
     // Text search
     if (search) {
-      filter.$text = { $search: search };
+      filter.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { description: { $regex: search, $options: 'i' } },
+        { brand: { $regex: search, $options: 'i' } },
+        { tags: { $in: [new RegExp(search, 'i')] } }
+      ];
     }
 
     // Sort object
     const sort = {};
-    if (search && !sortBy) {
-      sort.score = { $meta: 'textScore' };
-    } else {
-      sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
-    }
+    const actualSortBy = sortBy.replace('-', '');
+    const actualSortOrder = sortBy.startsWith('-') ? -1 : (sortOrder === 'desc' ? -1 : 1);
+    sort[actualSortBy] = actualSortOrder;
 
     // Pagination
     const skip = (page - 1) * limit;
@@ -76,8 +120,7 @@ export const getAllScents = async (req, res) => {
     const scents = await Scent.find(filter)
       .sort(sort)
       .skip(skip)
-      .limit(Number(limit))
-      .populate('sizes.stock');
+      .limit(Number(limit));
 
     const total = await Scent.countDocuments(filter);
 
@@ -85,10 +128,10 @@ export const getAllScents = async (req, res) => {
       success: true,
       data: scents,
       pagination: {
-        currentPage: Number(page),
+        current: Number(page),
         totalPages: Math.ceil(total / limit),
-        totalItems: total,
-        itemsPerPage: Number(limit)
+        total: total,
+        limit: Number(limit)
       },
       filters: filter
     });
@@ -121,7 +164,14 @@ export const getScentsByCollection = async (req, res) => {
     } = req.query;
 
     // Updated to include new gift collections
-    if (!['trending', 'best-seller', 'signature', 'limited-edition', 'mens-signature', 'orange-marmalade', 'rose-garden-essence', 'gender-free', 'limitless', 'perfect-discover-gifts', 'perfect-gifts-premium', 'perfect-gifts-luxury', 'home-decor-gifts'].includes(collection)) {
+    const validCollections = [
+      'trending', 'best-seller', 'signature', 'limited-edition', 
+      'mens-signature', 'orange-marmalade', 'rose-garden-essence', 
+      'gender-free', 'limitless', 'perfect-discover-gifts', 
+      'perfect-gifts-premium', 'perfect-gifts-luxury', 'home-decor-gifts'
+    ];
+
+    if (!validCollections.includes(collection)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid collection type'
@@ -130,7 +180,7 @@ export const getScentsByCollection = async (req, res) => {
 
     const filter = { 
       collection: collection.toLowerCase(),
-      isActive: isActive === 'true'
+      isActive: isActive === 'true' || isActive === true
     };
     
     if (category) filter.category = category.toLowerCase();
@@ -221,83 +271,83 @@ export const getFeaturedScents = async (req, res) => {
   try {
     const trending = await Scent.find({ 
       collection: 'trending', 
-      isFeatured: true,
+      $or: [{ isFeatured: true }, { featured: true }],
       isActive: true
     }).limit(8).sort({ createdAt: -1 });
 
     const bestSellers = await Scent.find({ 
       collection: 'best-seller', 
-      isFeatured: true,
+      $or: [{ isFeatured: true }, { featured: true }],
       isActive: true
     }).limit(8).sort({ createdAt: -1 });
 
     const signature = await Scent.find({ 
       collection: 'signature', 
-      isFeatured: true,
+      $or: [{ isFeatured: true }, { featured: true }],
       isActive: true
     }).limit(8).sort({ createdAt: -1 });
 
     const limitedEdition = await Scent.find({ 
       collection: 'limited-edition', 
-      isFeatured: true,
+      $or: [{ isFeatured: true }, { featured: true }],
       isActive: true
     }).limit(8).sort({ createdAt: -1 });
 
     // Men's collections
     const mensSignature = await Scent.find({ 
       collection: 'mens-signature', 
-      isFeatured: true,
+      $or: [{ isFeatured: true }, { featured: true }],
       isActive: true
     }).limit(8).sort({ createdAt: -1 });
 
     const orangeMarmalade = await Scent.find({ 
       collection: 'orange-marmalade', 
-      isFeatured: true,
+      $or: [{ isFeatured: true }, { featured: true }],
       isActive: true
     }).limit(8).sort({ createdAt: -1 });
 
     // Women's collection
     const roseGardenEssence = await Scent.find({ 
       collection: 'rose-garden-essence', 
-      isFeatured: true,
+      $or: [{ isFeatured: true }, { featured: true }],
       isActive: true
     }).limit(8).sort({ createdAt: -1 });
 
     // Unisex collections
     const genderFree = await Scent.find({ 
       collection: 'gender-free', 
-      isFeatured: true,
+      $or: [{ isFeatured: true }, { featured: true }],
       isActive: true
     }).limit(8).sort({ createdAt: -1 });
 
     const limitless = await Scent.find({ 
       collection: 'limitless', 
-      isFeatured: true,
+      $or: [{ isFeatured: true }, { featured: true }],
       isActive: true
     }).limit(8).sort({ createdAt: -1 });
 
     // NEW: Gift collections
     const perfectDiscoverGifts = await Scent.find({ 
       collection: 'perfect-discover-gifts', 
-      isFeatured: true,
+      $or: [{ isFeatured: true }, { featured: true }],
       isActive: true
     }).limit(8).sort({ createdAt: -1 });
 
     const perfectGiftsPremium = await Scent.find({ 
       collection: 'perfect-gifts-premium', 
-      isFeatured: true,
+      $or: [{ isFeatured: true }, { featured: true }],
       isActive: true
     }).limit(8).sort({ createdAt: -1 });
 
     const perfectGiftsLuxury = await Scent.find({ 
       collection: 'perfect-gifts-luxury', 
-      isFeatured: true,
+      $or: [{ isFeatured: true }, { featured: true }],
       isActive: true
     }).limit(8).sort({ createdAt: -1 });
 
     const homeDecorGifts = await Scent.find({ 
       collection: 'home-decor-gifts', 
-      isFeatured: true,
+      $or: [{ isFeatured: true }, { featured: true }],
       isActive: true
     }).limit(8).sort({ createdAt: -1 });
 
@@ -431,57 +481,143 @@ export const searchScents = async (req, res) => {
   }
 };
 
-// Create new scent (admin only)
+// Create new scent (admin only) - Updated to preserve original filename
 export const createScent = async (req, res) => {
   try {
-    const scentData = req.body;
-    
-    // Generate SKU if not provided
-    if (!scentData.sku) {
-      const timestamp = Date.now().toString().slice(-6);
-      const namePrefix = scentData.name ? scentData.name.substring(0, 3).toUpperCase() : 'SCT';
-      scentData.sku = `${namePrefix}${timestamp}`;
-    }
+    // Handle file upload first
+    upload(req, res, async (err) => {
+      if (err) {
+        console.error('File upload error:', err);
+        return res.status(400).json({
+          success: false,
+          message: 'File upload failed',
+          error: err.message
+        });
+      }
 
-    // Ensure lowercase for certain fields
-    if (scentData.category) scentData.category = scentData.category.toLowerCase();
-    if (scentData.collection) scentData.collection = scentData.collection.toLowerCase();
-    if (scentData.scentFamily) scentData.scentFamily = scentData.scentFamily.toLowerCase();
-    if (scentData.tags) scentData.tags = scentData.tags.map(tag => tag.toLowerCase());
-    if (scentData.season) scentData.season = scentData.season.map(s => s.toLowerCase());
-    if (scentData.occasion) scentData.occasion = scentData.occasion.map(o => o.toLowerCase());
-    
-    const newScent = new Scent(scentData);
-    const savedScent = await newScent.save();
+      try {
+        const scentData = { ...req.body };
 
-    res.status(201).json({
-      success: true,
-      message: 'Scent created successfully',
-      data: savedScent
+        // Process uploaded images - store original filenames as /images/originalname.ext
+        if (req.files) {
+          if (req.files.images) {
+            scentData.images = req.files.images.map(file => `/images/${file.filename}`);
+          }
+          if (req.files.hoverImage && req.files.hoverImage[0]) {
+            scentData.hoverImage = `/images/${req.files.hoverImage[0].filename}`;
+          }
+        }
+
+        // Process JSON fields
+        if (scentData.sizes) {
+          try {
+            scentData.sizes = JSON.parse(scentData.sizes);
+          } catch (e) {
+            console.error('Error parsing sizes:', e);
+          }
+        }
+
+        if (scentData.fragrance_notes) {
+          try {
+            scentData.fragrance_notes = JSON.parse(scentData.fragrance_notes);
+          } catch (e) {
+            console.error('Error parsing fragrance_notes:', e);
+          }
+        }
+
+        if (scentData.personalization) {
+          try {
+            scentData.personalization = JSON.parse(scentData.personalization);
+          } catch (e) {
+            console.error('Error parsing personalization:', e);
+          }
+        }
+
+        // Process comma-separated arrays
+        if (scentData.tags && typeof scentData.tags === 'string') {
+          scentData.tags = scentData.tags.split(',').map(tag => tag.trim()).filter(tag => tag);
+        }
+
+        if (scentData.season && typeof scentData.season === 'string') {
+          scentData.season = scentData.season.split(',').map(s => s.trim()).filter(s => s);
+        }
+
+        if (scentData.occasion && typeof scentData.occasion === 'string') {
+          scentData.occasion = scentData.occasion.split(',').map(o => o.trim()).filter(o => o);
+        }
+
+        if (scentData.ingredients && typeof scentData.ingredients === 'string') {
+          scentData.ingredients = scentData.ingredients.split(',').map(i => i.trim()).filter(i => i);
+        }
+
+        // Generate SKU if not provided
+        if (!scentData.sku) {
+          const timestamp = Date.now().toString().slice(-6);
+          const namePrefix = scentData.name ? scentData.name.substring(0, 3).toUpperCase() : 'SCT';
+          scentData.sku = `${namePrefix}${timestamp}`;
+        }
+
+        // Ensure lowercase for certain fields
+        if (scentData.category) scentData.category = scentData.category.toLowerCase();
+        if (scentData.collection) scentData.collection = scentData.collection.toLowerCase();
+        if (scentData.scentFamily) scentData.scentFamily = scentData.scentFamily.toLowerCase();
+        if (scentData.tags) scentData.tags = scentData.tags.map(tag => tag.toLowerCase());
+        if (scentData.season) scentData.season = scentData.season.map(s => s.toLowerCase());
+        if (scentData.occasion) scentData.occasion = scentData.occasion.map(o => o.toLowerCase());
+
+        // Convert string booleans to actual booleans
+        if (scentData.featured === 'true') scentData.featured = true;
+        if (scentData.featured === 'false') scentData.featured = false;
+        if (scentData.isFeatured === 'true') scentData.isFeatured = true;
+        if (scentData.isFeatured === 'false') scentData.isFeatured = false;
+        if (scentData.isActive === 'true') scentData.isActive = true;
+        if (scentData.isActive === 'false') scentData.isActive = false;
+        if (scentData.isNew === 'true') scentData.isNew = true;
+        if (scentData.isNew === 'false') scentData.isNew = false;
+        if (scentData.inStock === 'true') scentData.inStock = true;
+        if (scentData.inStock === 'false') scentData.inStock = false;
+
+        console.log('Creating scent with data:', scentData);
+
+        const newScent = new Scent(scentData);
+        const savedScent = await newScent.save();
+
+        res.status(201).json({
+          success: true,
+          message: 'Scent created successfully',
+          data: savedScent
+        });
+      } catch (error) {
+        console.error('Error creating scent:', error);
+        if (error.code === 11000) {
+          res.status(400).json({
+            success: false,
+            message: 'SKU already exists',
+            error: 'Duplicate SKU'
+          });
+        } else {
+          res.status(500).json({
+            success: false,
+            message: 'Failed to create scent',
+            error: error.message
+          });
+        }
+      }
     });
   } catch (error) {
-    console.error('Error creating scent:', error);
-    if (error.code === 11000) {
-      res.status(400).json({
-        success: false,
-        message: 'SKU already exists',
-        error: 'Duplicate SKU'
-      });
-    } else {
-      res.status(500).json({
-        success: false,
-        message: 'Failed to create scent',
-        error: error.message
-      });
-    }
+    console.error('Error in createScent:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to create scent',
+      error: error.message
+    });
   }
 };
 
-// Update scent (admin only)
+// Update scent (admin only) - Updated to preserve original filename
 export const updateScent = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
 
     if (!id.match(/^[0-9a-fA-F]{24}$/)) {
       return res.status(400).json({
@@ -490,47 +626,150 @@ export const updateScent = async (req, res) => {
       });
     }
 
-    // Ensure lowercase for certain fields
-    if (updateData.category) updateData.category = updateData.category.toLowerCase();
-    if (updateData.collection) updateData.collection = updateData.collection.toLowerCase();
-    if (updateData.scentFamily) updateData.scentFamily = updateData.scentFamily.toLowerCase();
-    if (updateData.tags) updateData.tags = updateData.tags.map(tag => tag.toLowerCase());
-    if (updateData.season) updateData.season = updateData.season.map(s => s.toLowerCase());
-    if (updateData.occasion) updateData.occasion = updateData.occasion.map(o => o.toLowerCase());
+    // Handle file upload first
+    upload(req, res, async (err) => {
+      if (err) {
+        console.error('File upload error:', err);
+        return res.status(400).json({
+          success: false,
+          message: 'File upload failed',
+          error: err.message
+        });
+      }
 
-    const updatedScent = await Scent.findByIdAndUpdate(
-      id,
-      updateData,
-      { new: true, runValidators: true }
-    );
+      try {
+        const updateData = { ...req.body };
 
-    if (!updatedScent) {
-      return res.status(404).json({
-        success: false,
-        message: 'Scent not found'
-      });
-    }
+        // Get existing scent for image handling
+        const existingScent = await Scent.findById(id);
+        if (!existingScent) {
+          return res.status(404).json({
+            success: false,
+            message: 'Scent not found'
+          });
+        }
 
-    res.status(200).json({
-      success: true,
-      message: 'Scent updated successfully',
-      data: updatedScent
+        // Process uploaded images - store original filenames as /images/originalname.ext
+        if (req.files) {
+          const keepExistingImages = updateData.keepExistingImages === 'true';
+          
+          if (req.files.images) {
+            const newImages = req.files.images.map(file => `/images/${file.filename}`);
+            
+            if (keepExistingImages && existingScent.images) {
+              updateData.images = [...existingScent.images, ...newImages];
+            } else {
+              updateData.images = newImages;
+            }
+          }
+          
+          if (req.files.hoverImage && req.files.hoverImage[0]) {
+            updateData.hoverImage = `/images/${req.files.hoverImage[0].filename}`;
+          }
+        }
+
+        // Remove keepExistingImages from update data
+        delete updateData.keepExistingImages;
+
+        // Process JSON fields
+        if (updateData.sizes) {
+          try {
+            updateData.sizes = JSON.parse(updateData.sizes);
+          } catch (e) {
+            console.error('Error parsing sizes:', e);
+          }
+        }
+
+        if (updateData.fragrance_notes) {
+          try {
+            updateData.fragrance_notes = JSON.parse(updateData.fragrance_notes);
+          } catch (e) {
+            console.error('Error parsing fragrance_notes:', e);
+          }
+        }
+
+        if (updateData.personalization) {
+          try {
+            updateData.personalization = JSON.parse(updateData.personalization);
+          } catch (e) {
+            console.error('Error parsing personalization:', e);
+          }
+        }
+
+        // Process comma-separated arrays
+        if (updateData.tags && typeof updateData.tags === 'string') {
+          updateData.tags = updateData.tags.split(',').map(tag => tag.trim()).filter(tag => tag);
+        }
+
+        if (updateData.season && typeof updateData.season === 'string') {
+          updateData.season = updateData.season.split(',').map(s => s.trim()).filter(s => s);
+        }
+
+        if (updateData.occasion && typeof updateData.occasion === 'string') {
+          updateData.occasion = updateData.occasion.split(',').map(o => o.trim()).filter(o => o);
+        }
+
+        if (updateData.ingredients && typeof updateData.ingredients === 'string') {
+          updateData.ingredients = updateData.ingredients.split(',').map(i => i.trim()).filter(i => i);
+        }
+
+        // Ensure lowercase for certain fields
+        if (updateData.category) updateData.category = updateData.category.toLowerCase();
+        if (updateData.collection) updateData.collection = updateData.collection.toLowerCase();
+        if (updateData.scentFamily) updateData.scentFamily = updateData.scentFamily.toLowerCase();
+        if (updateData.tags) updateData.tags = updateData.tags.map(tag => tag.toLowerCase());
+        if (updateData.season) updateData.season = updateData.season.map(s => s.toLowerCase());
+        if (updateData.occasion) updateData.occasion = updateData.occasion.map(o => o.toLowerCase());
+
+        // Convert string booleans to actual booleans
+        if (updateData.featured === 'true') updateData.featured = true;
+        if (updateData.featured === 'false') updateData.featured = false;
+        if (updateData.isFeatured === 'true') updateData.isFeatured = true;
+        if (updateData.isFeatured === 'false') updateData.isFeatured = false;
+        if (updateData.isActive === 'true') updateData.isActive = true;
+        if (updateData.isActive === 'false') updateData.isActive = false;
+        if (updateData.isNew === 'true') updateData.isNew = true;
+        if (updateData.isNew === 'false') updateData.isNew = false;
+        if (updateData.inStock === 'true') updateData.inStock = true;
+        if (updateData.inStock === 'false') updateData.inStock = false;
+
+        console.log('Updating scent with data:', updateData);
+
+        const updatedScent = await Scent.findByIdAndUpdate(
+          id,
+          updateData,
+          { new: true, runValidators: true }
+        );
+
+        res.status(200).json({
+          success: true,
+          message: 'Scent updated successfully',
+          data: updatedScent
+        });
+      } catch (error) {
+        console.error('Error updating scent:', error);
+        if (error.code === 11000) {
+          res.status(400).json({
+            success: false,
+            message: 'SKU already exists',
+            error: 'Duplicate SKU'
+          });
+        } else {
+          res.status(500).json({
+            success: false,
+            message: 'Failed to update scent',
+            error: error.message
+          });
+        }
+      }
     });
   } catch (error) {
-    console.error('Error updating scent:', error);
-    if (error.code === 11000) {
-      res.status(400).json({
-        success: false,
-        message: 'SKU already exists',
-        error: 'Duplicate SKU'
-      });
-    } else {
-      res.status(500).json({
-        success: false,
-        message: 'Failed to update scent',
-        error: error.message
-      });
-    }
+    console.error('Error in updateScent:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update scent',
+      error: error.message
+    });
   }
 };
 
@@ -555,6 +794,34 @@ export const deleteScent = async (req, res) => {
       });
     }
 
+    // Optional: Delete associated image files from public/images
+    if (deletedScent.images) {
+      deletedScent.images.forEach(imagePath => {
+        try {
+          // Remove leading slash and construct full path
+          const filename = imagePath.replace('/images/', '');
+          const fullPath = path.join(process.cwd(), 'public', 'images', filename);
+          if (fs.existsSync(fullPath)) {
+            fs.unlinkSync(fullPath);
+          }
+        } catch (err) {
+          console.error('Error deleting image file:', err);
+        }
+      });
+    }
+
+    if (deletedScent.hoverImage) {
+      try {
+        const filename = deletedScent.hoverImage.replace('/images/', '');
+        const fullPath = path.join(process.cwd(), 'public', 'images', filename);
+        if (fs.existsSync(fullPath)) {
+          fs.unlinkSync(fullPath);
+        }
+      } catch (err) {
+        console.error('Error deleting hover image file:', err);
+      }
+    }
+
     res.status(200).json({
       success: true,
       message: 'Scent deleted successfully',
@@ -570,7 +837,7 @@ export const deleteScent = async (req, res) => {
   }
 };
 
-// Soft delete scent (set isActive to false)
+// Soft delete scent (set isActive to false) - also toggle active status
 export const softDeleteScent = async (req, res) => {
   try {
     const { id } = req.params;
@@ -582,29 +849,33 @@ export const softDeleteScent = async (req, res) => {
       });
     }
 
-    const updatedScent = await Scent.findByIdAndUpdate(
-      id,
-      { isActive: false },
-      { new: true }
-    );
-
-    if (!updatedScent) {
+    const existingScent = await Scent.findById(id);
+    if (!existingScent) {
       return res.status(404).json({
         success: false,
         message: 'Scent not found'
       });
     }
 
+    // Toggle the isActive status
+    const newActiveStatus = !existingScent.isActive;
+
+    const updatedScent = await Scent.findByIdAndUpdate(
+      id,
+      { isActive: newActiveStatus },
+      { new: true }
+    );
+
     res.status(200).json({
       success: true,
-      message: 'Scent deactivated successfully',
+      message: `Scent ${newActiveStatus ? 'activated' : 'deactivated'} successfully`,
       data: updatedScent
     });
   } catch (error) {
-    console.error('Error deactivating scent:', error);
+    console.error('Error toggling scent status:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to deactivate scent',
+      message: 'Failed to toggle scent status',
       error: error.message
     });
   }
