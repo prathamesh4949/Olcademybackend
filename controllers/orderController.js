@@ -1,6 +1,7 @@
-// controllers/orderController.js
 import { Order } from '../models/Order.js';
 import mongoose from 'mongoose';
+
+import PDFDocument from 'pdfkit';
 
 // Generate unique order number
 const generateOrderNumber = () => {
@@ -585,3 +586,114 @@ export const bulkUpdateOrderStatus = async (req, res) => {
         });
     }
 };
+
+
+export const getOrderInvoice = async (req, res) => {
+  try {
+    const { orderNumber } = req.params;
+    const order = await Order.findOne({ orderNumber });
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=invoice-${orderNumber}.pdf`);
+    doc.pipe(res);
+
+    // Helper for aligned rows, compact columns
+    const drawRow = (doc, label, value, leftX, rightX, y, labelOpts = {}, valueOpts = {}) => {
+      doc.fontSize(11).fillColor('#333');
+      doc.text(label, leftX, y, labelOpts);
+      doc.text(value, rightX, y, Object.assign({ align: 'right', width: 100 }, valueOpts));
+    };
+
+    // ==== HEADER ====
+    doc.fontSize(22).fillColor('#000').text('Order Details', { align: 'center', underline: true });
+    doc.moveDown(1);
+
+    doc.fontSize(12)
+      .fillColor('#333')
+      .text(`Order Number:  ${order.orderNumber}`, { align: 'center' })
+      .text(`Order Date:  ${order.createdAt.toDateString()}`, { align: 'center' });
+    doc.moveDown(1.5);
+
+    // ==== CUSTOMER INFORMATION ====
+    const customer = order.customerInfo;
+    doc.fontSize(14).fillColor('#000').text('Customer Information', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(11).fillColor('#333')
+      .text(`Name:  ${customer.name}`)
+      .text(`Email:  ${customer.email}`)
+      .text(`Phone:  ${customer.phone}`)
+      .text(`Address:  ${customer.address},  ${customer.city},  ${customer.state}, ${customer.zipCode}`)
+      .text(`Country:  ${customer.country}`);
+    doc.moveDown(1.5);
+
+    // ==== ORDER ITEMS SECTION ====
+    doc.fontSize(14).fillColor('#000').text('Order Items', { underline: true });
+    doc.moveDown(0.5);
+
+    // Table Header
+    let y = doc.y;
+    doc.fontSize(12).fillColor('#000')
+      .text('Item', 50, y)
+      .text('Quantity', 250, y, { width: 60, align: 'center' })
+      .text('Price', 340, y, { width: 80, align: 'right' })
+      .text('Total', 460, y, { width: 80, align: 'right' });
+    doc.moveTo(50, y + 15).lineTo(550, y + 15).strokeColor('#aaa').stroke();
+    y += 25;
+
+    // Table Body
+    doc.fontSize(11).fillColor('#333');
+    order.items.forEach((item) => {
+      const totalItemPrice = (item.price * item.quantity).toFixed(2);
+      doc.text(item.name, 50, y)
+        .text(item.quantity, 260, y, { width: 40, align: 'center' })
+        .text(`$${item.price.toFixed(2)}`, 340, y, { width: 80, align: 'right' })
+        .text(`$${totalItemPrice}`, 460, y, { width: 80, align: 'right' });
+      y += 20;
+    });
+
+    // ==== PRICING SUMMARY + PAYMENT DETAILS (compact columns) ====
+    doc.moveDown(2);
+    y = doc.y + 10;
+    const labelX = 60;     
+    const valueX = 450;   
+    const lineGap = 18;
+
+    // Pricing Summary Title
+    doc.fontSize(12).fillColor('#000').text('Pricing Summary', labelX, y, { underline: true });
+    y += 25;
+
+    drawRow(doc, 'Subtotal:', `$${order.pricing.subtotal.toFixed(2)}`, labelX, valueX, y);
+    y += lineGap;
+    drawRow(doc, 'Shipping:', `$${order.pricing.shipping.toFixed(2)}`, labelX, valueX, y);
+    y += lineGap;
+    drawRow(doc, 'Tax:', `$${order.pricing.tax.toFixed(2)}`, labelX, valueX, y);
+    y += lineGap;
+    if (order.pricing.discount > 0) {
+      drawRow(doc, 'Discount:', `-$${order.pricing.discount.toFixed(2)}`, labelX, valueX, y);
+      y += lineGap*2.0;
+    }
+    doc.font('Helvetica-Bold');
+    drawRow(doc, 'Total:', `$${order.pricing.total.toFixed(2)}`, labelX, valueX, y);
+    doc.font('Helvetica');
+    y += lineGap * 2.0;
+
+    
+    doc.end();
+  } catch (error) {
+    console.error('Error generating PDF invoice:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to generate invoice PDF'
+    });
+  }
+};
+
+
