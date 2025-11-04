@@ -10,44 +10,66 @@ const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configure multer for file uploads
+// ✅ Configure multer with proper path handling and ALL image extensions
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const uploadPath = path.join(__dirname, '../../public/images');
+    const uploadPath = path.join(__dirname, '../public/images');
     if (!fs.existsSync(uploadPath)) {
       fs.mkdirSync(uploadPath, { recursive: true });
     }
     cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
-    const uploadPath = path.join(__dirname, '../../public/images');
-    const ext = path.extname(file.originalname);
-    const baseName = path.basename(file.originalname, ext);
-    let filename = `${baseName}${ext}`;
-    let counter = 1;
-
-    // Check for existing file and append counter if necessary
-    while (fs.existsSync(path.join(uploadPath, filename))) {
-      filename = `${baseName}-${counter}${ext}`;
-      counter++;
-    }
-
+    const ext = path.extname(file.originalname).toLowerCase();
+    const baseName = path.basename(file.originalname, ext)
+      .replace(/[^a-zA-Z0-9]/g, '_')
+      .toLowerCase();
+    
+    const uniqueSuffix = `${Date.now()}`;
+    const filename = `${baseName}_${uniqueSuffix}${ext}`;
+    
+    console.log('📁 Uploading file:', {
+      original: file.originalname,
+      saved: filename,
+      extension: ext,
+      mimetype: file.mimetype,
+      fullPath: path.join(__dirname, '../public/images', filename)
+    });
+    
     cb(null, filename);
   },
 });
 
+// ✅ Enhanced file filter to accept ALL common image formats
 const fileFilter = (req, file, cb) => {
-  if (file.mimetype.startsWith('image/')) {
+  const allowedMimeTypes = [
+    'image/jpeg',
+    'image/jpg', 
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'image/svg+xml',
+    'image/bmp',
+    'image/tiff',
+    'image/x-icon'
+  ];
+  
+  const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.tiff', '.ico'];
+  const fileExtension = path.extname(file.originalname).toLowerCase();
+  
+  if (allowedMimeTypes.includes(file.mimetype) || allowedExtensions.includes(fileExtension)) {
+    console.log('✅ File accepted:', file.originalname, 'Type:', file.mimetype);
     cb(null, true);
   } else {
-    cb(new Error('Only image files are allowed!'), false);
+    console.log('❌ File rejected:', file.originalname, 'Type:', file.mimetype);
+    cb(new Error(`Only image files are allowed! Received: ${file.mimetype}`), false);
   }
 };
 
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+    fileSize: 10 * 1024 * 1024, // Increased to 10MB for better quality images
   },
   fileFilter: fileFilter,
 });
@@ -86,6 +108,112 @@ const generateSKU = (name, category, counter) => {
   const categoryPrefix = category.substring(0, 2).toUpperCase();
   return `${namePrefix}-${categoryPrefix}O-H${counter.toString().padStart(3, '0')}`;
 };
+
+// ✅ ENHANCED: Check if image file exists with multiple naming patterns and ALL extensions
+const findImageFile = (imagePath) => {
+  if (!imagePath) return null;
+  
+  // Clean the path to get just the filename
+  const cleanFilename = imagePath.replace(/^\/+/, '').replace(/^images\//, '');
+  const imagesDir = path.join(__dirname, '../public/images');
+  const fullPath = path.join(imagesDir, cleanFilename);
+  
+  // Check if exact file exists
+  if (fs.existsSync(fullPath)) {
+    console.log('✅ Found exact file:', cleanFilename);
+    return fullPath;
+  }
+  
+  // Try to find with timestamp pattern if it's an exact filename
+  if (!cleanFilename.match(/_\d{13}/)) {
+    const ext = path.extname(cleanFilename);
+    const baseName = path.basename(cleanFilename, ext);
+    
+    try {
+      const files = fs.readdirSync(imagesDir);
+      
+      // Look for files that match: basename_timestamp with ANY image extension
+      const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.tiff', '.ico'];
+      
+      for (const imageExt of imageExtensions) {
+        const pattern = new RegExp(`^${baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_\\d{13}${imageExt.replace('.', '\\.')}$`, 'i');
+        const matchingFile = files.find(file => pattern.test(file));
+        
+        if (matchingFile) {
+          const matchingPath = path.join(imagesDir, matchingFile);
+          console.log('✅ Found timestamped version:', matchingFile, 'for', cleanFilename);
+          return matchingPath;
+        }
+      }
+      
+      // If original extension search didn't work, try with the same extension
+      if (ext) {
+        const pattern = new RegExp(`^${baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_\\d{13}${ext.replace('.', '\\.')}$`, 'i');
+        const matchingFile = files.find(file => pattern.test(file));
+        
+        if (matchingFile) {
+          const matchingPath = path.join(imagesDir, matchingFile);
+          console.log('✅ Found timestamped version:', matchingFile, 'for', cleanFilename);
+          return matchingPath;
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error searching for timestamped file:', error);
+    }
+  }
+  
+  console.warn('⚠️ Image file not found:', cleanFilename);
+  return null;
+};
+
+// ✅ ENHANCED: Helper function to delete image files (handles all extensions)
+const deleteImageFile = (imagePath) => {
+  if (!imagePath) return false;
+  
+  const foundPath = findImageFile(imagePath);
+  
+  if (foundPath) {
+    try {
+      fs.unlinkSync(foundPath);
+      console.log('✅ Deleted image:', path.basename(foundPath));
+      return true;
+    } catch (error) {
+      console.error('❌ Error deleting image:', foundPath, error.message);
+    }
+  }
+  
+  return false;
+};
+
+// ✅ Helper to format image paths - store ONLY the filename
+const formatImagePath = (filename) => {
+  if (!filename) return null;
+  
+  // Strip any existing path prefixes - store ONLY the filename
+  const cleanFilename = filename.replace(/^\/+/, '').replace(/^images\//, '');
+  
+  console.log('📝 Formatted image path:', {
+    input: filename,
+    output: cleanFilename
+  });
+  
+  return cleanFilename;
+};
+
+// ✅ NEW: Middleware to serve images with fallback to timestamped versions
+router.use('/images', (req, res, next) => {
+  const requestedFile = req.path.substring(1); // Remove leading slash
+  const imagePath = findImageFile(requestedFile);
+  
+  if (imagePath) {
+    console.log('📸 Serving image:', path.basename(imagePath), 'for request:', requestedFile);
+    return res.sendFile(imagePath);
+  }
+  
+  console.warn('⚠️ Image not found:', requestedFile);
+  // Let express handle 404
+  next();
+});
 
 // SPECIFIC ROUTES FIRST
 
@@ -293,10 +421,9 @@ router.get('/unisex/collections', async (req, res) => {
   }
 });
 
-// GET /api/products/home/collections - FIXED: Using correct collections for home category
+// GET /api/products/home/collections
 router.get('/home/collections', async (req, res) => {
   try {
-    // Using both collection sets to ensure compatibility
     const collections = ['just-arrived', 'best-sellers', 'huntsman-savile-row', 'fragrant-favourites', 'summer-scents', 'signature-collection'];
     const result = {};
 
@@ -316,7 +443,6 @@ router.get('/home/collections', async (req, res) => {
 
       console.log(`Found ${products.length} products for home collection: ${collection}`);
 
-      // Only add collections that have products
       if (products.length > 0) {
         result[collection.replace(/-/g, '_')] = products;
       }
@@ -587,8 +713,8 @@ router.post('/', upload.fields([
   { name: 'hoverImage', maxCount: 1 },
 ]), async (req, res) => {
   try {
-    console.log('Creating new product with data:', req.body);
-    console.log('Uploaded files:', req.files);
+    console.log('📦 Creating new product with data:', req.body);
+    console.log('📁 Uploaded files:', req.files);
 
     const {
       name,
@@ -621,12 +747,18 @@ router.post('/', upload.fields([
       });
     }
 
-    // Process uploaded images
-    const images = req.files['images'] ? req.files['images'].map((file) => `/images/${file.filename}`) : [];
-    const hoverImage = req.files['hoverImage'] ? `/images/${req.files['hoverImage'][0].filename}` : null;
+    // Store ONLY the filename (no path prefix)
+    const images = req.files['images'] 
+      ? req.files['images'].map((file) => formatImagePath(file.filename)) 
+      : [];
+    const hoverImage = req.files['hoverImage'] 
+      ? formatImagePath(req.files['hoverImage'][0].filename) 
+      : null;
+
+    console.log('✅ Stored image filenames:', { images, hoverImage });
 
     // Generate unique SKU
-    const counter = (await Product.countDocuments()) + 100; // Start at 100 to match format like H122
+    const counter = (await Product.countDocuments()) + 100;
     const sku = generateSKU(name, category, counter);
 
     let parsedSizes = [];
@@ -721,7 +853,7 @@ router.post('/', upload.fields([
     const product = new Product(productData);
     const savedProduct = await product.save();
 
-    console.log('Product created successfully:', savedProduct._id);
+    console.log('✅ Product created successfully:', savedProduct._id);
 
     res.status(201).json({
       success: true,
@@ -729,15 +861,13 @@ router.post('/', upload.fields([
       data: savedProduct,
     });
   } catch (error) {
-    console.error('Error creating product:', error);
+    console.error('❌ Error creating product:', error);
 
+    // Clean up uploaded files on error
     if (req.files) {
       const filesToDelete = [...(req.files['images'] || []), ...(req.files['hoverImage'] || [])];
       filesToDelete.forEach((file) => {
-        const filePath = path.join(__dirname, '../../public/images', file.filename);
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
+        deleteImageFile(file.filename);
       });
     }
 
@@ -758,7 +888,7 @@ router.post('/', upload.fields([
 
 // PARAMETERIZED ROUTES
 
-// GET /api/products/:id - FIXED: Using correct response structure for detail page
+// GET /api/products/:id
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -785,11 +915,10 @@ router.get('/:id', async (req, res) => {
 
     console.log('Product found:', product._id);
 
-    // IMPORTANT: Using the structure that works with your detail page
     res.json({
       success: true,
       data: {
-        product: product,  // Wrapping product in data.product structure
+        product: product,
       },
     });
   } catch (error) {
@@ -810,6 +939,8 @@ router.put('/:id', upload.fields([
   try {
     const { id } = req.params;
 
+    console.log('📝 Updating product:', id);
+
     if (!isValidCustomId(id)) {
       return res.status(400).json({
         success: false,
@@ -827,60 +958,41 @@ router.put('/:id', upload.fields([
 
     const updateData = { ...req.body };
 
-    // Process uploaded images
+    // Handle new images - store ONLY filename
     if (req.files && req.files['images'] && req.files['images'].length > 0) {
-      const newImages = req.files['images'].map((file) => `/images/${file.filename}`);
+      const newImages = req.files['images'].map((file) => formatImagePath(file.filename));
 
       if (req.body.keepExistingImages === 'true') {
         updateData.images = [...(existingProduct.images || []), ...newImages];
+        console.log('✅ Keeping existing images + adding new ones');
       } else {
-        updateData.images = newImages;
-
+        // Delete old images before replacing
         if (existingProduct.images) {
           existingProduct.images.forEach((imagePath) => {
-            const fullPath = path.join(__dirname, '../../public', imagePath);
-            if (fs.existsSync(fullPath)) {
-              try {
-                fs.unlinkSync(fullPath);
-                console.log('Deleted old image:', fullPath);
-              } catch (error) {
-                console.error('Error deleting old image:', fullPath, error);
-              }
-            }
+            deleteImageFile(imagePath);
           });
         }
+        updateData.images = newImages;
+        console.log('✅ Replaced all images with new ones');
       }
     }
 
-    // Process hover image
+    // Handle hover image
     if (req.files && req.files['hoverImage'] && req.files['hoverImage'].length > 0) {
-      const newHoverImage = `/images/${req.files['hoverImage'][0].filename}`;
+      const newHoverImage = formatImagePath(req.files['hoverImage'][0].filename);
+      
+      // Delete old hover image
+      if (existingProduct.hoverImage) {
+        deleteImageFile(existingProduct.hoverImage);
+      }
+      
       updateData.hoverImage = newHoverImage;
-
-      if (existingProduct.hoverImage) {
-        const fullPath = path.join(__dirname, '../../public', existingProduct.hoverImage);
-        if (fs.existsSync(fullPath)) {
-          try {
-            fs.unlinkSync(fullPath);
-            console.log('Deleted old hover image:', fullPath);
-          } catch (error) {
-            console.error('Error deleting old hover image:', fullPath, error);
-          }
-        }
-      }
+      console.log('✅ Updated hover image');
     } else if (req.body.keepExistingImages === 'false' && !req.files['images']) {
-      updateData.hoverImage = null;
       if (existingProduct.hoverImage) {
-        const fullPath = path.join(__dirname, '../../public', existingProduct.hoverImage);
-        if (fs.existsSync(fullPath)) {
-          try {
-            fs.unlinkSync(fullPath);
-            console.log('Deleted old hover image:', fullPath);
-          } catch (error) {
-            console.error('Error deleting old hover image:', fullPath, error);
-          }
-        }
+        deleteImageFile(existingProduct.hoverImage);
       }
+      updateData.hoverImage = null;
     }
 
     // Parse complex fields
@@ -953,7 +1065,7 @@ router.put('/:id', upload.fields([
 
     const updatedProduct = await Product.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
 
-    console.log('Product updated successfully:', updatedProduct._id);
+    console.log('✅ Product updated successfully:', updatedProduct._id);
 
     res.json({
       success: true,
@@ -961,20 +1073,13 @@ router.put('/:id', upload.fields([
       data: updatedProduct,
     });
   } catch (error) {
-    console.error('Error updating product:', error);
+    console.error('❌ Error updating product:', error);
 
+    // Clean up uploaded files on error
     if (req.files) {
       const filesToDelete = [...(req.files['images'] || []), ...(req.files['hoverImage'] || [])];
       filesToDelete.forEach((file) => {
-        const filePath = path.join(__dirname, '../../public/images', file.filename);
-        if (fs.existsSync(filePath)) {
-          try {
-            fs.unlinkSync(filePath);
-            console.log('Deleted uploaded file on error:', filePath);
-          } catch (error) {
-            console.error('Error deleting uploaded file:', filePath, error);
-          }
-        }
+        deleteImageFile(file.filename);
       });
     }
 
@@ -1009,34 +1114,18 @@ router.delete('/:id', async (req, res) => {
     // Delete associated image files
     if (product.images && Array.isArray(product.images)) {
       product.images.forEach((imagePath) => {
-        const fullPath = path.join(__dirname, '../../public', imagePath);
-        if (fs.existsSync(fullPath)) {
-          try {
-            fs.unlinkSync(fullPath);
-            console.log('Deleted image file:', fullPath);
-          } catch (error) {
-            console.error('Error deleting image file:', fullPath, error);
-          }
-        }
+        deleteImageFile(imagePath);
       });
     }
 
     // Delete hover image
     if (product.hoverImage) {
-      const fullPath = path.join(__dirname, '../../public', product.hoverImage);
-      if (fs.existsSync(fullPath)) {
-        try {
-          fs.unlinkSync(fullPath);
-          console.log('Deleted hover image file:', fullPath);
-        } catch (error) {
-          console.error('Error deleting hover image file:', fullPath, error);
-        }
-      }
+      deleteImageFile(product.hoverImage);
     }
 
     await Product.findByIdAndDelete(id);
 
-    console.log('Product deleted successfully:', id);
+    console.log('✅ Product deleted successfully:', id);
 
     res.json({
       success: true,
@@ -1120,15 +1209,7 @@ router.delete('/:id/image/:index', async (req, res) => {
     }
 
     const imagePath = product.images[imageIndex];
-    const fullPath = path.join(__dirname, '../../public', imagePath);
-
-    if (fs.existsSync(fullPath)) {
-      try {
-        fs.unlinkSync(fullPath);
-      } catch (error) {
-        console.error('Error deleting image:', fullPath, error);
-      }
-    }
+    deleteImageFile(imagePath);
 
     product.images.splice(imageIndex, 1);
     product.updatedAt = new Date();
@@ -1176,15 +1257,7 @@ router.delete('/:id/hover-image', async (req, res) => {
       });
     }
 
-    const fullPath = path.join(__dirname, '../../public', product.hoverImage);
-    if (fs.existsSync(fullPath)) {
-      try {
-        fs.unlinkSync(fullPath);
-        console.log('Deleted hover image:', fullPath);
-      } catch (error) {
-        console.error('Error deleting hover image:', fullPath, error);
-      }
-    }
+    deleteImageFile(product.hoverImage);
 
     product.hoverImage = null;
     product.updatedAt = new Date();

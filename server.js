@@ -12,10 +12,15 @@ import cors from "cors";
 import mongoose from 'mongoose';
 import path from 'path';
 import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { connectDB } from './utils/db.js';
 
 // Load environment variables
 dotenv.config();
+
+// ✅ ES6 module dirname workaround
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 
@@ -76,22 +81,58 @@ app.use((req, res, next) => {
     }
 });
 
-// Ensure public/images directory exists
-const publicPath = path.join(process.cwd(), 'public');
+// ✅ OPTIMIZED: Ensure public/images directory exists with absolute path
+const publicPath = path.join(__dirname, 'public');
 const imagesPath = path.join(publicPath, 'images');
 
 if (!fs.existsSync(publicPath)) {
     fs.mkdirSync(publicPath, { recursive: true });
-    console.log('📁 Created public directory');
+    console.log('📁 Created public directory at:', publicPath);
 }
 
 if (!fs.existsSync(imagesPath)) {
     fs.mkdirSync(imagesPath, { recursive: true });
-    console.log('📁 Created public/images directory');
+    console.log('📁 Created public/images directory at:', imagesPath);
 }
 
-// 🔥 STATIC FILES - Serve images from public directory (same as products)
-app.use(express.static('public'));
+// ✅ CRITICAL: Serve static files BEFORE API routes with proper configuration
+// Serve images with explicit path and proper caching headers
+app.use('/images', express.static(path.join(__dirname, 'public/images'), {
+    maxAge: '1d', // Cache for 1 day
+    etag: true,
+    lastModified: true,
+    setHeaders: (res, filePath) => {
+        // Set proper MIME types
+        if (filePath.endsWith('.png')) {
+            res.setHeader('Content-Type', 'image/png');
+        } else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
+            res.setHeader('Content-Type', 'image/jpeg');
+        } else if (filePath.endsWith('.gif')) {
+            res.setHeader('Content-Type', 'image/gif');
+        } else if (filePath.endsWith('.webp')) {
+            res.setHeader('Content-Type', 'image/webp');
+        }
+        // Enable CORS for images
+        res.setHeader('Access-Control-Allow-Origin', '*');
+    }
+}));
+
+// Also serve entire public directory as fallback
+app.use(express.static(path.join(__dirname, 'public'), {
+    maxAge: '1d',
+    etag: true,
+    lastModified: true
+}));
+
+// ✅ ENHANCED: Image debugging middleware
+app.use((req, res, next) => {
+    if (req.path.startsWith('/images/')) {
+        console.log(`🖼️  Image request: ${req.path}`);
+        console.log(`   Full path: ${path.join(__dirname, 'public', req.path)}`);
+        console.log(`   Exists: ${fs.existsSync(path.join(__dirname, 'public', req.path))}`);
+    }
+    next();
+});
 
 // Connect to database
 connectDB().catch(err => {
@@ -100,7 +141,9 @@ connectDB().catch(err => {
 
 // Debug middleware to log all routes
 app.use((req, res, next) => {
-    console.log(`${req.method} ${req.path} - ${new Date().toISOString()}`);
+    if (!req.path.includes('favicon') && !req.path.includes('.well-known')) {
+        console.log(`${req.method} ${req.path} - ${new Date().toISOString()}`);
+    }
     next();
 });
 
@@ -141,7 +184,6 @@ app.get("/test-scent-creation", async (req, res) => {
     try {
         const { default: Scent } = await import('./models/Scent.js');
         
-        // Create a test scent
         const testScent = new Scent({
             name: 'Test Scent ' + Date.now(),
             description: 'This is a test scent created automatically',
@@ -227,7 +269,7 @@ app.get("/test-bestsellers", async (req, res) => {
     }
 });
 
-// Test endpoint for womens signature scents (using 'signature' collection)
+// Test endpoint for womens signature scents
 app.get("/test-womens-signature", async (req, res) => {
     try {
         const { default: Scent } = await import('./models/Scent.js');
@@ -546,49 +588,73 @@ app.get("/test-banners", async (req, res) => {
     }
 });
 
-// Debug static files
+// ✅ ENHANCED: Debug static files with detailed information
 app.get("/debug/static", async (req, res) => {
     try {
-        const publicPath = path.join(process.cwd(), 'public');
-        const imagesPath = path.join(publicPath, 'images');
-        
         const publicExists = fs.existsSync(publicPath);
         const imagesExists = fs.existsSync(imagesPath);
         
         const imageFiles = imagesExists ? fs.readdirSync(imagesPath) : [];
         
+        // Get file details
+        const fileDetails = imageFiles.slice(0, 20).map(filename => {
+            const filePath = path.join(imagesPath, filename);
+            const stats = fs.statSync(filePath);
+            return {
+                filename,
+                size: `${(stats.size / 1024).toFixed(2)} KB`,
+                created: stats.birthtime,
+                modified: stats.mtime,
+                url: `/images/${filename}`
+            };
+        });
+        
         res.json({
             success: true,
-            paths: {
+            serverInfo: {
+                __dirname,
                 cwd: process.cwd(),
+                nodeVersion: process.version
+            },
+            paths: {
                 publicPath,
-                imagesPath
+                imagesPath,
+                relative: path.relative(process.cwd(), imagesPath)
             },
             exists: {
                 public: publicExists,
                 images: imagesExists
             },
             files: {
-                imageFiles: imageFiles.slice(0, 20)
+                totalCount: imageFiles.length,
+                imageFiles: fileDetails
             },
-            sampleUrls: {
-                imageUrl: imageFiles.length > 0 ? `/images/${imageFiles[0]}` : 'No images found'
+            sampleUrls: fileDetails.map(f => f.url),
+            testInstructions: {
+                message: "Copy any URL from 'sampleUrls' and test in browser",
+                example: fileDetails[0] ? `http://localhost:${process.env.PORT || 8000}${fileDetails[0].url}` : 'No images available'
             }
         });
     } catch (error) {
         res.json({
             success: false,
-            error: error.message
+            error: error.message,
+            stack: error.stack
         });
     }
 });
 
-// Health check - Updated with new gift collection endpoints
+// Health check
 app.get("/", (req, res) => {
     res.json({
         message: "OLCAcademy backend is running!",
         status: "healthy",
         timestamp: new Date().toISOString(),
+        staticFiles: {
+            publicPath,
+            imagesPath,
+            configured: true
+        },
         endpoints: {
             users: "/user",
             orders: "/order",
@@ -608,7 +674,6 @@ app.get("/", (req, res) => {
             testOrangeMarmalade: "/test-orange-marmalade",
             testGenderFree: "/test-gender-free",
             testLimitless: "/test-limitless",
-            // NEW: Gift collection test endpoints
             testPerfectDiscoverGifts: "/test-perfect-discover-gifts",
             testPerfectGiftsPremium: "/test-perfect-gifts-premium",
             testPerfectGiftsLuxury: "/test-perfect-gifts-luxury",
@@ -654,7 +719,7 @@ app.get("/debug/routes", (req, res) => {
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 app.get('/.well-known/*', (req, res) => res.status(204).end());
 
-// 404 handler - MUST be AFTER all route definitions - Updated with new gift collection endpoints
+// 404 handler - MUST be AFTER all route definitions
 app.use('*', (req, res) => {
     if (!req.originalUrl.includes('favicon') && !req.originalUrl.includes('.well-known')) {
         console.log('404 - Route not found:', req.method, req.originalUrl);
@@ -684,7 +749,6 @@ app.use('*', (req, res) => {
             '/test-orange-marmalade',
             '/test-gender-free',
             '/test-limitless',
-            // NEW: Gift collection endpoints
             '/test-perfect-discover-gifts',
             '/test-perfect-gifts-premium',
             '/test-perfect-gifts-luxury',
@@ -710,42 +774,33 @@ app.use((err, req, res, next) => {
 
 const PORT = process.env.PORT || 8000;
 
-// Updated development server console logs with new gift collection endpoints
+// Development server console logs
 if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, async () => {
         try {
             await connectDB();
-            console.log(`Server running on PORT ${PORT}`);
-            console.log(`Available endpoints:`);
-            console.log(`- Users: http://localhost:${PORT}/user`);
-            console.log(`- Orders: http://localhost:${PORT}/order`);
-            console.log(`- Cart: http://localhost:${PORT}/cart`);
-            console.log(`- Wishlist: http://localhost:${PORT}/wishlist`);
-            console.log(`- Products: http://localhost:${PORT}/api/products`);
-            console.log(`- Scents: http://localhost:${PORT}/api/scents`);
-            console.log(`- Banners: http://localhost:${PORT}/api/banners`);
-            console.log(`- Test Products: http://localhost:${PORT}/test-products`);
-            console.log(`- Test Scents: http://localhost:${PORT}/test-scents`);
-            console.log(`- Test Scent Creation: http://localhost:${PORT}/test-scent-creation`);
-            console.log(`- Test Trending: http://localhost:${PORT}/test-trending`);
-            console.log(`- Test Best Sellers: http://localhost:${PORT}/test-bestsellers`);
-            console.log(`- Test Women's Signature: http://localhost:${PORT}/test-womens-signature`);
-            console.log(`- Test Rose Garden Essence: http://localhost:${PORT}/test-rose-garden-essence`);
-            console.log(`- Test Men's Signature: http://localhost:${PORT}/test-mens-signature`);
-            console.log(`- Test Orange Marmalade: http://localhost:${PORT}/test-orange-marmalade`);
-            console.log(`- Test Gender-Free: http://localhost:${PORT}/test-gender-free`);
-            console.log(`- Test Limitless: http://localhost:${PORT}/test-limitless`);
-            // NEW: Gift collection endpoints
-            console.log(`- Test Perfect Discover Gifts: http://localhost:${PORT}/test-perfect-discover-gifts`);
-            console.log(`- Test Perfect Gifts Premium: http://localhost:${PORT}/test-perfect-gifts-premium`);
-            console.log(`- Test Perfect Gifts Luxury: http://localhost:${PORT}/test-perfect-gifts-luxury`);
-            console.log(`- Test Home Decor Gifts: http://localhost:${PORT}/test-home-decor-gifts`);
-            console.log(`- Test Banners: http://localhost:${PORT}/test-banners`);
-            console.log(`- Test Wishlist: http://localhost:${PORT}/test-wishlist`);
-            console.log(`- Debug Routes: http://localhost:${PORT}/debug/routes`);
-            console.log(`- Debug Static: http://localhost:${PORT}/debug/static`);
-            console.log(`- Images: http://localhost:${PORT}/images/`);
-            console.log(`📁 Using public/images directory for both products and scents`);
+            console.log(`\n${'='.repeat(60)}`);
+            console.log(`🚀 Server running on PORT ${PORT}`);
+            console.log(`📁 Static files serving from: ${publicPath}`);
+            console.log(`🖼️  Images directory: ${imagesPath}`);
+            console.log(`${'='.repeat(60)}\n`);
+            
+            console.log(`🔗 Available endpoints:`);
+            console.log(`   - Health: http://localhost:${PORT}/`);
+            console.log(`   - Users: http://localhost:${PORT}/user`);
+            console.log(`   - Orders: http://localhost:${PORT}/order`);
+            console.log(`   - Cart: http://localhost:${PORT}/cart`);
+            console.log(`   - Wishlist: http://localhost:${PORT}/wishlist`);
+            console.log(`   - Products: http://localhost:${PORT}/api/products`);
+            console.log(`   - Scents: http://localhost:${PORT}/api/scents`);
+            console.log(`   - Banners: http://localhost:${PORT}/api/banners`);
+            console.log(`\n🧪 Debug endpoints:`);
+            console.log(`   - Debug Static Files: http://localhost:${PORT}/debug/static`);
+            console.log(`   - Debug Routes: http://localhost:${PORT}/debug/routes`);
+            console.log(`\n📸 Image serving:`);
+            console.log(`   - Images URL: http://localhost:${PORT}/images/`);
+            console.log(`   - Test: Visit /debug/static for sample image URLs`);
+            console.log(`${'='.repeat(60)}\n`);
         } catch (error) {
             console.error('Failed to start server:', error);
         }
