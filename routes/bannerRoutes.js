@@ -1,80 +1,183 @@
 import express from 'express';
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs/promises';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import Banner from '../models/Banner.js';
 
 const router = express.Router();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-// Configure multer for banner image uploads
+// ✅ Configure multer with proper path handling and ALL image extensions
 const storage = multer.diskStorage({
-  destination: async (req, file, cb) => {
-    const uploadPath = 'uploads/images';
-    try {
-      await fs.mkdir(uploadPath, { recursive: true });
-      cb(null, uploadPath);
-    } catch (error) {
-      console.error('Error creating upload directory:', error);
-      cb(error);
+  destination: (req, file, cb) => {
+    const uploadPath = path.join(__dirname, '../public/images');
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath, { recursive: true });
     }
+    cb(null, uploadPath);
   },
   filename: (req, file, cb) => {
-    try {
-      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-      const extension = path.extname(file.originalname);
-      const fieldName = file.fieldname;
-      const filename = `banner-${fieldName}-${uniqueSuffix}${extension}`;
-      cb(null, filename);
-    } catch (error) {
-      console.error('Error generating filename:', error);
-      cb(error);
-    }
-  }
+    const ext = path.extname(file.originalname).toLowerCase();
+    const baseName = path.basename(file.originalname, ext)
+      .replace(/[^a-zA-Z0-9]/g, '_')
+      .toLowerCase();
+    
+    const uniqueSuffix = `${Date.now()}`;
+    const filename = `${baseName}_${uniqueSuffix}${ext}`;
+    
+    console.log('📁 Uploading banner file:', {
+      original: file.originalname,
+      saved: filename,
+      extension: ext,
+      mimetype: file.mimetype,
+      fullPath: path.join(__dirname, '../public/images', filename)
+    });
+    
+    cb(null, filename);
+  },
 });
+
+// ✅ Enhanced file filter to accept ALL common image formats
+const fileFilter = (req, file, cb) => {
+  const allowedMimeTypes = [
+    'image/jpeg',
+    'image/jpg', 
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'image/svg+xml',
+    'image/bmp',
+    'image/tiff',
+    'image/x-icon'
+  ];
+  
+  const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.tiff', '.ico'];
+  const fileExtension = path.extname(file.originalname).toLowerCase();
+  
+  if (allowedMimeTypes.includes(file.mimetype) || allowedExtensions.includes(fileExtension)) {
+    console.log('✅ Banner file accepted:', file.originalname, 'Type:', file.mimetype);
+    cb(null, true);
+  } else {
+    console.log('❌ Banner file rejected:', file.originalname, 'Type:', file.mimetype);
+    cb(new Error(`Only image files are allowed! Received: ${file.mimetype}`), false);
+  }
+};
 
 const upload = multer({
-  storage,
+  storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB limit
+    fileSize: 10 * 1024 * 1024, // Increased to 10MB for better quality images
   },
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = /jpeg|jpg|png|gif|webp/;
-    const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-    const mimetype = allowedTypes.test(file.mimetype);
-    
-    if (mimetype && extname) {
-      return cb(null, true);
-    } else {
-      cb(new Error('Only image files (JPEG, JPG, PNG, GIF, WebP) are allowed!'));
-    }
-  }
+  fileFilter: fileFilter,
 });
 
-// Helper function to delete file safely
-const deleteFile = async (filePath) => {
-  try {
-    if (filePath && typeof filePath === 'string') {
-      await fs.unlink(filePath);
-      console.log(`Deleted file: ${filePath}`);
-    }
-  } catch (error) {
-    console.error(`Error deleting file ${filePath}:`, error.message);
+// ✅ ENHANCED: Check if image file exists with multiple naming patterns and ALL extensions
+const findImageFile = (imagePath) => {
+  if (!imagePath) return null;
+  
+  // Clean the path to get just the filename
+  const cleanFilename = imagePath.replace(/^\/+/, '').replace(/^images\//, '');
+  const imagesDir = path.join(__dirname, '../public/images');
+  const fullPath = path.join(imagesDir, cleanFilename);
+  
+  // Check if exact file exists
+  if (fs.existsSync(fullPath)) {
+    console.log('✅ Found exact banner file:', cleanFilename);
+    return fullPath;
   }
+  
+  // Try to find with timestamp pattern if it's an exact filename
+  if (!cleanFilename.match(/_\d{13}/)) {
+    const ext = path.extname(cleanFilename);
+    const baseName = path.basename(cleanFilename, ext);
+    
+    try {
+      const files = fs.readdirSync(imagesDir);
+      
+      // Look for files that match: basename_timestamp with ANY image extension
+      const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.bmp', '.tiff', '.ico'];
+      
+      for (const imageExt of imageExtensions) {
+        const pattern = new RegExp(`^${baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_\\d{13}${imageExt.replace('.', '\\.')}$`, 'i');
+        const matchingFile = files.find(file => pattern.test(file));
+        
+        if (matchingFile) {
+          const matchingPath = path.join(imagesDir, matchingFile);
+          console.log('✅ Found timestamped banner version:', matchingFile, 'for', cleanFilename);
+          return matchingPath;
+        }
+      }
+      
+      // If original extension search didn't work, try with the same extension
+      if (ext) {
+        const pattern = new RegExp(`^${baseName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}_\\d{13}${ext.replace('.', '\\.')}$`, 'i');
+        const matchingFile = files.find(file => pattern.test(file));
+        
+        if (matchingFile) {
+          const matchingPath = path.join(imagesDir, matchingFile);
+          console.log('✅ Found timestamped banner version:', matchingFile, 'for', cleanFilename);
+          return matchingPath;
+        }
+      }
+    } catch (error) {
+      console.error('❌ Error searching for timestamped banner file:', error);
+    }
+  }
+  
+  console.warn('⚠️ Banner image file not found:', cleanFilename);
+  return null;
 };
 
-// Helper function to get file path from URL
-const getFilePathFromUrl = (url) => {
-  try {
-    if (!url || typeof url !== 'string') return null;
-    if (url.startsWith('/images/')) {
-      return `uploads${url}`;
+// ✅ ENHANCED: Helper function to delete image files (handles all extensions)
+const deleteImageFile = (imagePath) => {
+  if (!imagePath) return false;
+  
+  const foundPath = findImageFile(imagePath);
+  
+  if (foundPath) {
+    try {
+      fs.unlinkSync(foundPath);
+      console.log('✅ Deleted banner image:', path.basename(foundPath));
+      return true;
+    } catch (error) {
+      console.error('❌ Error deleting banner image:', foundPath, error.message);
     }
-    return `uploads/images/${url}`;
-  } catch (error) {
-    console.error('Error processing file path:', error);
-    return null;
   }
+  
+  return false;
 };
+
+// ✅ Helper to format image paths - store ONLY the filename
+const formatImagePath = (filename) => {
+  if (!filename) return null;
+  
+  // Strip any existing path prefixes - store ONLY the filename
+  const cleanFilename = filename.replace(/^\/+/, '').replace(/^images\//, '');
+  
+  console.log('📝 Formatted banner image path:', {
+    input: filename,
+    output: cleanFilename
+  });
+  
+  return cleanFilename;
+};
+
+// ✅ NEW: Middleware to serve banner images with fallback to timestamped versions
+router.use('/images', (req, res, next) => {
+  const requestedFile = req.path.substring(1); // Remove leading slash
+  const imagePath = findImageFile(requestedFile);
+  
+  if (imagePath) {
+    console.log('📸 Serving banner image:', path.basename(imagePath), 'for request:', requestedFile);
+    return res.sendFile(imagePath);
+  }
+  
+  console.warn('⚠️ Banner image not found:', requestedFile);
+  // Let express handle 404
+  next();
+});
 
 // IMPORTANT: Debug route must come BEFORE parameterized routes
 // GET /api/banners/debug/count - Debug endpoint
@@ -84,7 +187,7 @@ router.get('/debug/count', async (req, res) => {
     const activeBanners = await Banner.countDocuments({ isActive: true });
     
     const categoryCounts = {};
-    const categories = ['home', 'men', 'women', 'unisex', 'gift'];
+    const categories = ['home', 'men', 'women', 'unisex', 'gift', 'gifts'];
     const types = ['hero', 'product_highlight', 'collection_highlight', 'gift_highlight'];
     
     for (const category of categories) {
@@ -99,7 +202,7 @@ router.get('/debug/count', async (req, res) => {
     }
 
     const sampleBanners = await Banner.find()
-      .select('_id title category type')
+      .select('_id title category type backgroundImage image')
       .limit(5)
       .lean();
 
@@ -113,7 +216,9 @@ router.get('/debug/count', async (req, res) => {
           id: b._id,
           title: b.title,
           category: b.category,
-          type: b.type
+          type: b.type,
+          backgroundImage: b.backgroundImage,
+          image: b.image
         }))
       }
     });
@@ -197,14 +302,14 @@ router.post('/', upload.fields([
 
     const bannerData = { ...req.body };
 
-    // Handle file uploads
+    // Handle file uploads - store ONLY the filename
     if (req.files) {
       if (req.files.backgroundImage && req.files.backgroundImage[0]) {
-        bannerData.backgroundImage = `/images/${req.files.backgroundImage[0].filename}`;
+        bannerData.backgroundImage = formatImagePath(req.files.backgroundImage[0].filename);
         console.log('Background image uploaded:', bannerData.backgroundImage);
       }
       if (req.files.image && req.files.image[0]) {
-        bannerData.image = `/images/${req.files.image[0].filename}`;
+        bannerData.image = formatImagePath(req.files.image[0].filename);
         console.log('Image uploaded:', bannerData.image);
       }
     }
@@ -231,6 +336,11 @@ router.post('/', upload.fields([
       });
     }
 
+    // Ensure lowercase for category
+    if (bannerData.category) {
+      bannerData.category = bannerData.category.toLowerCase();
+    }
+
     console.log('Creating banner with data:', bannerData);
 
     const banner = new Banner(bannerData);
@@ -249,10 +359,10 @@ router.post('/', upload.fields([
     // Clean up uploaded files on error
     if (req.files) {
       if (req.files.backgroundImage && req.files.backgroundImage[0]) {
-        await deleteFile(`uploads/images/${req.files.backgroundImage[0].filename}`);
+        deleteImageFile(req.files.backgroundImage[0].filename);
       }
       if (req.files.image && req.files.image[0]) {
-        await deleteFile(`uploads/images/${req.files.image[0].filename}`);
+        deleteImageFile(req.files.image[0].filename);
       }
     }
     
@@ -283,10 +393,10 @@ router.put('/:id', upload.fields([
       // Clean up any uploaded files if banner doesn't exist
       if (req.files) {
         if (req.files.backgroundImage && req.files.backgroundImage[0]) {
-          await deleteFile(`uploads/images/${req.files.backgroundImage[0].filename}`);
+          deleteImageFile(req.files.backgroundImage[0].filename);
         }
         if (req.files.image && req.files.image[0]) {
-          await deleteFile(`uploads/images/${req.files.image[0].filename}`);
+          deleteImageFile(req.files.image[0].filename);
         }
       }
       
@@ -298,32 +408,40 @@ router.put('/:id', upload.fields([
 
     console.log('Existing banner found:', existingBanner.title);
 
-    const oldFiles = [];
-    
+    // Handle file uploads
     if (req.files) {
       if (req.files.backgroundImage && req.files.backgroundImage[0]) {
+        // Delete old background image if not keeping existing
         if (existingBanner.backgroundImage && !keepExistingImages) {
-          const oldPath = getFilePathFromUrl(existingBanner.backgroundImage);
-          if (oldPath) oldFiles.push(oldPath);
+          deleteImageFile(existingBanner.backgroundImage);
         }
-        updateData.backgroundImage = `/images/${req.files.backgroundImage[0].filename}`;
+        updateData.backgroundImage = formatImagePath(req.files.backgroundImage[0].filename);
         console.log('New background image:', updateData.backgroundImage);
       }
       
       if (req.files.image && req.files.image[0]) {
+        // Delete old image if not keeping existing
         if (existingBanner.image && !keepExistingImages) {
-          const oldPath = getFilePathFromUrl(existingBanner.image);
-          if (oldPath) oldFiles.push(oldPath);
+          deleteImageFile(existingBanner.image);
         }
-        updateData.image = `/images/${req.files.image[0].filename}`;
+        updateData.image = formatImagePath(req.files.image[0].filename);
         console.log('New image:', updateData.image);
       }
+    }
+
+    // Ensure lowercase for category
+    if (updateData.category) {
+      updateData.category = updateData.category.toLowerCase();
+    }
+
+    // Convert boolean fields
+    if (updateData.isActive !== undefined) {
+      updateData.isActive = updateData.isActive === 'true' || updateData.isActive === true;
     }
 
     delete updateData.keepExistingImages;
 
     console.log('Update data:', updateData);
-    console.log('Old files to delete:', oldFiles);
 
     const updatedBanner = await Banner.findByIdAndUpdate(
       id,
@@ -332,11 +450,6 @@ router.put('/:id', upload.fields([
     );
 
     console.log('Banner updated successfully:', updatedBanner._id);
-
-    // Delete old files after successful update
-    for (const filePath of oldFiles) {
-      await deleteFile(filePath);
-    }
 
     res.json({
       success: true,
@@ -349,10 +462,10 @@ router.put('/:id', upload.fields([
     // Clean up new files on error
     if (req.files) {
       if (req.files.backgroundImage && req.files.backgroundImage[0]) {
-        await deleteFile(`uploads/images/${req.files.backgroundImage[0].filename}`);
+        deleteImageFile(req.files.backgroundImage[0].filename);
       }
       if (req.files.image && req.files.image[0]) {
-        await deleteFile(`uploads/images/${req.files.image[0].filename}`);
+        deleteImageFile(req.files.image[0].filename);
       }
     }
     
@@ -384,19 +497,11 @@ router.delete('/:id', async (req, res) => {
     await Banner.findByIdAndDelete(id);
 
     // Then delete associated files
-    const filesToDelete = [];
     if (banner.backgroundImage) {
-      const bgPath = getFilePathFromUrl(banner.backgroundImage);
-      if (bgPath) filesToDelete.push(bgPath);
+      deleteImageFile(banner.backgroundImage);
     }
     if (banner.image) {
-      const imgPath = getFilePathFromUrl(banner.image);
-      if (imgPath) filesToDelete.push(imgPath);
-    }
-
-    // Delete files
-    for (const filePath of filesToDelete) {
-      await deleteFile(filePath);
+      deleteImageFile(banner.image);
     }
 
     console.log('Banner deleted successfully');
@@ -455,10 +560,10 @@ router.delete('/:id/image/:imageType', async (req, res) => {
     const { id, imageType } = req.params;
     console.log(`DELETE /api/banners/${id}/image/${imageType} - Deleting specific image`);
 
-    if (!['background', 'image'].includes(imageType)) {
+    if (!['background', 'backgroundImage', 'image'].includes(imageType)) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid image type. Must be "background" or "image"'
+        message: 'Invalid image type. Must be "background", "backgroundImage", or "image"'
       });
     }
 
@@ -470,7 +575,8 @@ router.delete('/:id/image/:imageType', async (req, res) => {
       });
     }
 
-    const imageField = imageType === 'background' ? 'backgroundImage' : 'image';
+    // Normalize imageType
+    const imageField = imageType === 'background' ? 'backgroundImage' : imageType;
     const imageUrl = banner[imageField];
 
     if (!imageUrl) {
@@ -481,10 +587,7 @@ router.delete('/:id/image/:imageType', async (req, res) => {
     }
 
     // Delete file from filesystem
-    const filePath = getFilePathFromUrl(imageUrl);
-    if (filePath) {
-      await deleteFile(filePath);
-    }
+    deleteImageFile(imageUrl);
 
     // Remove image reference from database
     banner[imageField] = undefined;
