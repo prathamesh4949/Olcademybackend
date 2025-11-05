@@ -5,6 +5,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -642,20 +643,26 @@ router.get('/:id', async (req, res) => {
   }
 });
 
-// PUT /api/scents/:id
+// ⭐ PUT /api/scents/:id - COMPLETE FIXED VERSION
 router.put('/:id', upload.fields([
   { name: 'images', maxCount: 5 },
   { name: 'hoverImage', maxCount: 1 },
 ]), async (req, res) => {
   try {
     const { id } = req.params;
-    console.log('Updating scent:', id);
+    console.log('========== SCENT UPDATE START ==========');
+    console.log('Scent ID:', id);
+    console.log('keepExistingImages from body:', req.body.keepExistingImages);
+    console.log('All body keys:', Object.keys(req.body));
+    console.log('Files received:', req.files ? Object.keys(req.files) : 'none');
+    
     if (!isValidCustomId(id)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid scent ID format',
       });
     }
+    
     const existingScent = await Scent.findById(id);
     if (!existingScent) {
       return res.status(404).json({
@@ -663,81 +670,133 @@ router.put('/:id', upload.fields([
         message: 'Scent not found',
       });
     }
-    const updateData = { ...req.body };
-    if (req.files && req.files['images'] && req.files['images'].length > 0) {
-      const newImages = req.files['images'].map((file) => formatImagePath(file.filename));
-      if (req.body.keepExistingImages === 'true') {
-        updateData.images = [...(existingScent.images || []), ...newImages];
-        console.log('Keeping existing images + adding new ones');
+    
+    console.log('BEFORE UPDATE:');
+    console.log('- Existing images count:', existingScent.images?.length || 0);
+    console.log('- Existing images:', existingScent.images);
+    console.log('- Existing hover image:', existingScent.hoverImage);
+    
+    // Create updateData without images first
+    const updateData = {};
+    
+    // Copy all non-image fields
+    Object.keys(req.body).forEach(key => {
+      if (key !== 'images' && key !== 'hoverImage' && key !== 'keepExistingImages') {
+        updateData[key] = req.body[key];
+      }
+    });
+    
+    // ===== IMAGE HANDLING LOGIC =====
+    const hasNewImages = req.files?.images?.length > 0;
+    const hasNewHoverImage = req.files?.hoverImage?.length > 0;
+    const keepExisting = req.body.keepExistingImages === 'true';
+    
+    console.log('IMAGE DECISION FACTORS:');
+    console.log('- New images uploaded:', hasNewImages, hasNewImages ? `(${req.files.images.length} files)` : '');
+    console.log('- New hover uploaded:', hasNewHoverImage);
+    console.log('- Keep existing flag:', keepExisting);
+    
+    // Handle main images
+    if (hasNewImages) {
+      const newImages = req.files.images.map(file => formatImagePath(file.filename));
+      console.log('New images to add:', newImages);
+      
+      if (keepExisting) {
+        // APPEND MODE
+        const existingImages = Array.isArray(existingScent.images) ? existingScent.images : [];
+        updateData.images = [...existingImages, ...newImages];
+        console.log('✅ APPEND MODE: Combined', existingImages.length, '+', newImages.length, '=', updateData.images.length, 'images');
       } else {
-        if (existingScent.images) {
-          existingScent.images.forEach((imagePath) => {
-            deleteImageFile(imagePath);
-          });
+        // REPLACE MODE
+        console.log('✅ REPLACE MODE: Deleting', existingScent.images?.length || 0, 'old images');
+        if (existingScent.images?.length > 0) {
+          existingScent.images.forEach(img => deleteImageFile(img));
         }
         updateData.images = newImages;
-        console.log('Replaced all images with new ones');
+        console.log('✅ REPLACE MODE: Set to', newImages.length, 'new images');
+      }
+    } else {
+      // No new images uploaded
+      if (keepExisting) {
+        // DON'T touch images field - will preserve existing
+        console.log('✅ PRESERVE MODE: Not modifying images field (will keep existing', existingScent.images?.length || 0, 'images)');
+        // Don't set updateData.images at all
+      } else {
+        // Clear images
+        console.log('✅ CLEAR MODE: Deleting all images');
+        if (existingScent.images?.length > 0) {
+          existingScent.images.forEach(img => deleteImageFile(img));
+        }
+        updateData.images = [];
       }
     }
-    if (req.files && req.files['hoverImage'] && req.files['hoverImage'].length > 0) {
-      const newHoverImage = formatImagePath(req.files['hoverImage'][0].filename);
+    
+    // Handle hover image
+    if (hasNewHoverImage) {
+      const newHover = formatImagePath(req.files.hoverImage[0].filename);
+      console.log('✅ New hover image:', newHover);
       if (existingScent.hoverImage) {
         deleteImageFile(existingScent.hoverImage);
       }
-      updateData.hoverImage = newHoverImage;
-      console.log('Updated hover image');
-    } else if (req.body.keepExistingImages === 'false' && !req.files['images']) {
-      if (existingScent.hoverImage) {
-        deleteImageFile(existingScent.hoverImage);
+      updateData.hoverImage = newHover;
+    } else {
+      if (keepExisting) {
+        // DON'T touch hover image field
+        console.log('✅ PRESERVE MODE: Not modifying hover image field');
+        // Don't set updateData.hoverImage at all
+      } else {
+        // Clear hover image
+        console.log('✅ CLEAR MODE: Removing hover image');
+        if (existingScent.hoverImage) {
+          deleteImageFile(existingScent.hoverImage);
+        }
+        updateData.hoverImage = null;
       }
-      updateData.hoverImage = null;
     }
+    
+    console.log('FINAL UPDATE DATA:');
+    console.log('- images field present:', 'images' in updateData);
+    console.log('- images value:', updateData.images);
+    console.log('- hoverImage field present:', 'hoverImage' in updateData);
+    console.log('- hoverImage value:', updateData.hoverImage);
+    
+    // Parse other fields
     if (updateData.sizes && typeof updateData.sizes === 'string') {
       try {
         updateData.sizes = JSON.parse(updateData.sizes);
-        updateData.sizes = updateData.sizes.map(size => ({
-          size: size.size || existingScent.volume || '50ml',
-          price: Number(size.price) || Number(updateData.price) || existingScent.price,
-          available: size.available !== undefined ? size.available : (Number(size.stock) || 0) > 0,
-          stock: Number(size.stock) || 0,
-        }));
-      } catch (error) {
-        console.error('Error parsing sizes:', error);
+      } catch (e) {
+        console.error('Error parsing sizes:', e);
       }
     }
+    
     if (updateData.fragrance_notes && typeof updateData.fragrance_notes === 'string') {
       try {
         updateData.fragrance_notes = JSON.parse(updateData.fragrance_notes);
-        updateData.fragrance_notes = {
-          top: Array.isArray(updateData.fragrance_notes.top) ? updateData.fragrance_notes.top : [],
-          middle: Array.isArray(updateData.fragrance_notes.middle) ? updateData.fragrance_notes.middle : [],
-          base: Array.isArray(updateData.fragrance_notes.base) ? updateData.fragrance_notes.base : [],
-        };
-      } catch (error) {
-        console.error('Error parsing fragrance notes:', error);
+      } catch (e) {
+        console.error('Error parsing fragrance_notes:', e);
       }
     }
+    
     if (updateData.personalization && typeof updateData.personalization === 'string') {
       try {
         updateData.personalization = JSON.parse(updateData.personalization);
-        updateData.personalization = {
-          available: updateData.personalization.available || false,
-          max_characters: Number(updateData.personalization.max_characters) || 15,
-          price: Number(updateData.personalization.price) || 0,
-        };
-      } catch (error) {
-        console.error('Error parsing personalization:', error);
+      } catch (e) {
+        console.error('Error parsing personalization:', e);
       }
     }
+    
     if (updateData.tags && typeof updateData.tags === 'string') {
-      updateData.tags = updateData.tags.split(',').map((tag) => tag.trim().toLowerCase());
+      updateData.tags = updateData.tags.split(',').map(t => t.trim().toLowerCase());
     }
+    
     if (updateData.season && typeof updateData.season === 'string') {
-      updateData.season = updateData.season.split(',').map((s) => s.trim().toLowerCase());
+      updateData.season = updateData.season.split(',').map(s => s.trim().toLowerCase());
     }
+    
     if (updateData.occasion && typeof updateData.occasion === 'string') {
-      updateData.occasion = updateData.occasion.split(',').map((o) => o.trim().toLowerCase());
+      updateData.occasion = updateData.occasion.split(',').map(o => o.trim().toLowerCase());
     }
+    
     if (updateData.price) updateData.price = Number(updateData.price);
     if (updateData.stock) updateData.stock = Number(updateData.stock);
     if (updateData.rating) updateData.rating = Number(updateData.rating);
@@ -745,9 +804,21 @@ router.put('/:id', upload.fields([
     if (updateData.isActive !== undefined) updateData.isActive = updateData.isActive === 'true' || updateData.isActive === true;
     if (updateData.category) updateData.category = updateData.category.toLowerCase();
     if (updateData.collection) updateData.collection = updateData.collection.toLowerCase();
+    
     updateData.updatedAt = new Date();
-    const updatedScent = await Scent.findByIdAndUpdate(id, updateData, { new: true, runValidators: true });
-    console.log('Scent updated successfully:', updatedScent._id);
+    
+    // Perform update
+    const updatedScent = await Scent.findByIdAndUpdate(id, updateData, { 
+      new: true, 
+      runValidators: true 
+    });
+    
+    console.log('AFTER UPDATE:');
+    console.log('- Updated images count:', updatedScent.images?.length || 0);
+    console.log('- Updated images:', updatedScent.images);
+    console.log('- Updated hover:', updatedScent.hoverImage);
+    console.log('========== SCENT UPDATE END ==========');
+    
     res.json({
       success: true,
       message: 'Scent updated successfully',
@@ -755,12 +826,12 @@ router.put('/:id', upload.fields([
     });
   } catch (error) {
     console.error('Error updating scent:', error);
+    
     if (req.files) {
       const filesToDelete = [...(req.files['images'] || []), ...(req.files['hoverImage'] || [])];
-      filesToDelete.forEach((file) => {
-        deleteImageFile(file.filename);
-      });
+      filesToDelete.forEach(file => deleteImageFile(file.filename));
     }
+    
     res.status(500).json({
       success: false,
       message: 'Error updating scent',
@@ -845,7 +916,7 @@ router.patch('/:id/deactivate', async (req, res) => {
   }
 });
 
-// DELETE /api/scents/:id/images/:index  ← CORRECTED
+// DELETE /api/scents/:id/images/:index
 router.delete('/:id/images/:index', async (req, res) => {
   try {
     const { id, index } = req.params;
@@ -889,7 +960,7 @@ router.delete('/:id/images/:index', async (req, res) => {
   }
 });
 
-// DELETE /api/scents/:id/hover-image  ← Already correct
+// DELETE /api/scents/:id/hover-image
 router.delete('/:id/hover-image', async (req, res) => {
   try {
     const { id } = req.params;
