@@ -521,8 +521,13 @@ const router = express.Router();
 // Create new order (can be used by guests or authenticated users)
 router.post('/create', createOrder);
 
+
+
+
 // Get order by order number (public access but with restrictions)
 router.get('/:orderNumber', getOrder);
+
+
 
 // Get invoice for one order (for download)
 router.get('/:orderNumber/invoice', getOrderInvoice);

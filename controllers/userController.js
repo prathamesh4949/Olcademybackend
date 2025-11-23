@@ -517,3 +517,90 @@ export const getUserProfile = async (req, res) => {
         });
     }
 };
+
+
+// Update user profile (protected route)
+export const updateUserProfile = async (req, res) => {
+    try {
+        const { username, email } = req.body;
+        const userId = req.user._id; // populated by authMiddleware
+
+        if (!username || !email) {
+            return res.status(400).json({
+                message: "Username and email are required.",
+                success: false
+            });
+        }
+
+        // Basic username/email validation
+        if (username.length < 3) {
+            return res.status(400).json({
+                message: "Username must be at least 3 characters long.",
+                success: false
+            });
+        }
+
+        if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+            return res.status(400).json({
+                message: "Username can only contain letters, numbers, and underscores.",
+                success: false
+            });
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return res.status(400).json({
+                message: "Please provide a valid email address.",
+                success: false
+            });
+        }
+
+        // Check if new username or email is already taken (by someone else)
+        const existingUser = await User.findOne({
+            $or: [{ username }, { email }],
+            _id: { $ne: userId } // exclude current user
+        });
+
+        if (existingUser) {
+            return res.status(409).json({
+                message: existingUser.username === username
+                    ? "Username is already taken."
+                    : "Email is already registered.",
+                success: false
+            });
+        }
+
+        // Update the user
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            { username, email },
+            { new: true, runValidators: true }
+        ).select("-password -emailOtp -emailOtpExpiry");
+
+        if (!updatedUser) {
+            return res.status(404).json({
+                message: "User not found.",
+                success: false
+            });
+        }
+
+        res.status(200).json({
+            message: "Profile updated successfully.",
+            user: {
+                id: updatedUser._id,
+                username: updatedUser.username,
+                email: updatedUser.email,
+                isAdmin: updatedUser.isAdmin,
+                isVerified: updatedUser.isVerified,
+                updatedAt: updatedUser.updatedAt
+            },
+            success: true
+        });
+    } catch (error) {
+        console.error("Update profile error:", error);
+        res.status(500).json({
+            message: "Server error. Please try again later.",
+            success: false
+        });
+    }
+};
