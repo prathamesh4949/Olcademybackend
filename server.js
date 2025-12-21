@@ -14,20 +14,36 @@ import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { connectDB } from './utils/db.js';
+import subscriberRoutes from "./routes/subscriberRoutes.js";
 
 // Load environment variables
 dotenv.config();
+
+const app = express();
+
+app.use(cors({
+  origin: "http://localhost:4028",
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,
+}));
+
+// 🔥 THIS LINE IS MANDATORY
+app.options("*", cors());
 
 // ✅ ES6 module dirname workaround
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const app = express();
+
 
 // Middlewares
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
+
+// ✅ Subscriber route
+app.use("/api", subscriberRoutes);
 
 // CORS configuration
 const corsOptions = {
@@ -55,12 +71,14 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
+
 // Additional CORS headers
 app.use((req, res, next) => {
     const origin = req.headers.origin;
     const allowedOrigins = [
         "http://localhost:4028",
         "http://localhost:3000",
+        "http://localhost:5173",
         "https://olcademyfrontend.vercel.app",
         process.env.FRONTEND_URL
     ].filter(Boolean);
