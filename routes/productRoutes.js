@@ -9,6 +9,47 @@ import { fileURLToPath } from 'url';
 const router = express.Router();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+/*
+  GET /api/products/:id/related
+  Fetch related products for "YOU MAY ALSO LIKE"
+ */
+router.get('/:id/related', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const product = await Product.findById(id);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+
+    const relatedProducts = await Product.find({
+      _id: { $ne: id },
+      category: product.category,
+      isActive: true
+    })
+      .limit(4)
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: {
+        related_products: relatedProducts
+      }
+    });
+
+  } catch (error) {
+    console.error('Related products error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch related products',
+      error: error.message
+    });
+  }
+});
+//3nd of related products route
 
 // ✅ Configure multer with proper path handling and ALL image extensions
 const storage = multer.diskStorage({
