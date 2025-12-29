@@ -1,5 +1,6 @@
 import express from 'express';
 import Product from '../models/Product.js';
+import Scent from '../models/Scent.js'; // Import Scent model
 import mongoose from 'mongoose';
 import multer from 'multer';
 import path from 'path';
@@ -279,12 +280,16 @@ router.get('/search', async (req, res) => {
     }
 
     let products = await Product.find(filter).limit(parseInt(limit)).lean();
+    let scents = await Scent.find(filter).limit(parseInt(limit)).lean(); // Fetch scents using the same filter and limit
 
     products = products.map(ensureProductSizes);
 
     res.json({
       success: true,
-      data: products,
+      data: {
+        products,
+        scents, // Include scents in the response
+      },
       count: products.length,
     });
   } catch (error) {

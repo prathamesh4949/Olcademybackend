@@ -1,3 +1,5 @@
+
+// routes/scentRoutes.js
 import express from 'express';
 import Scent from '../models/Scent.js';
 import mongoose from 'mongoose';
@@ -185,6 +187,13 @@ const generateSKU = (name, collection, counter) => {
   const collectionPrefix = collection.substring(0, 2).toUpperCase();
   return `${namePrefix}-${collectionPrefix}S-H${counter.toString().padStart(3, '0')}`;
 };
+//helper to normalise scent and product response
+const normalizeProduct = (p) => ({
+  ...p,
+  price: p.discountedPrice ?? p.price ?? p.sizes?.[0]?.price ?? 0,
+  rating: p.rating ?? 5,
+  images: p.images?.length ? p.images : ['/images/default-perfume.png'],
+});
 
 // Helper function to ensure scent has proper size structure
 const ensureScentSizes = (scent) => {
@@ -207,8 +216,9 @@ const ensureScentSizes = (scent) => {
   return scent;
 };
 
+
 // SPECIFIC ROUTES FIRST
-// GET /api/scents/featured
+// GET /api/scent/featured
 router.get('/featured', async (req, res) => {
   try {
     console.log('Fetching featured scents...');
@@ -607,7 +617,47 @@ router.post('/', upload.fields([
     });
   }
 });
+/*
+  GET /api/scents/:id/related
+  Fetch related products for "YOU MAY ALSO LIKE"
+ */
+router.get('/:id/related', async (req, res) => {
+  try {
+    const { id } = req.params;
 
+    const product = await Scent.findById(id);
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+
+    const relatedProducts = await Scent.find({
+      _id: { $ne: id },
+      category: product.category,
+      isActive: true
+    })
+      .limit(4)
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: {
+        related_products: relatedProducts
+      }
+    });
+
+  } catch (error) {
+    console.error('Related products error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch related products',
+      error: error.message
+    });
+  }
+});
+//3nd of related products route
 // PARAMETERIZED ROUTES
 // GET /api/scents/:id
 router.get('/:id', async (req, res) => {
