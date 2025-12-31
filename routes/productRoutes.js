@@ -262,7 +262,7 @@ router.use('/images', (req, res, next) => {
 // GET /api/products/search
 router.get('/search', async (req, res) => {
   try {
-    const { q, category, minPrice, maxPrice, limit = 100 } = req.query;
+    const { q, category, minPrice, maxPrice, limit = 20 } = req.query;
     const filter = { isActive: true };
 
     if (q) {
