@@ -9,7 +9,7 @@ const subscriberSchema = new mongoose.Schema(
       lowercase: true,
       trim: true,
     },
-  },
+  }, 
   { timestamps: true }
 );
 
