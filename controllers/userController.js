@@ -604,3 +604,92 @@ export const updateUserProfile = async (req, res) => {
         });
     }
 };
+
+// Get saved shipment info for authenticated user
+export const getShipment = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const user = await User.findById(userId).select('shipment');
+
+        if (!user) {
+            return res.status(404).json({
+                message: 'User not found',
+                success: false
+            });
+        }
+
+        return res.status(200).json({
+            message: 'Shipment fetched successfully',
+            shipment: Array.isArray(user.shipment) ? user.shipment : (user.shipment ? [user.shipment] : []),
+            success: true
+        });
+    } catch (error) {
+        console.error('Get shipment error:', error);
+        return res.status(500).json({
+            message: 'Server error. Please try again later.',
+            success: false
+        });
+    }
+};
+
+// Save/update shipment info for authenticated user
+export const updateShipment = async (req, res) => {
+    try {
+        const userId = req.user._id;
+        const { shipment } = req.body || {};
+
+        if (!shipment || typeof shipment !== 'object') {
+            return res.status(400).json({
+                message: 'Shipment data is required',
+                success: false
+            });
+        }
+
+        let update;
+        if (Array.isArray(shipment)) {
+            // Replace entire shipment array
+            update = { $set: { shipment } };
+        } else if (typeof shipment === 'object') {
+            // Append single shipment entry
+            update = { $push: { shipment } };
+        } else {
+            return res.status(400).json({
+                message: 'Invalid shipment payload',
+                success: false
+            });
+        }
+
+        // Apply update with validation
+        const updated = await User.findByIdAndUpdate(
+            userId,
+            update,
+            { new: true, runValidators: true, context: 'query' }
+        ).select('shipment');
+
+        if (!updated) {
+            return res.status(404).json({
+                message: 'User not found',
+                success: false
+            });
+        }
+
+        return res.status(200).json({
+            message: 'Shipment saved successfully',
+            shipment: updated.shipment,
+            success: true
+        });
+    } catch (error) {
+        console.error('Update shipment error:', error);
+        // Mongoose validation errors
+        if (error.name === 'ValidationError') {
+            return res.status(400).json({
+                message: error.message,
+                success: false
+            });
+        }
+        return res.status(500).json({
+            message: 'Server error. Please try again later.',
+            success: false
+        });
+    }
+};

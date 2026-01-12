@@ -7,7 +7,9 @@ import {
     verifyEmail,
     checkUsernameAvailability,
     getUserProfile,
-    updateUserProfile
+    updateUserProfile,
+    getShipment,
+    updateShipment
 } from '../controllers/userController.js';
 import { authMiddleware, adminMiddleware } from '../middlewares/authMiddleware.js';
 
@@ -25,6 +27,10 @@ router.get('/check-username/:username', checkUsernameAvailability)
 // Protected routes - Require authentication
 router.get('/profile', authMiddleware, getUserProfile)
 router.put('/profile', authMiddleware, updateUserProfile);
+
+// Shipment routes - authenticated user
+router.get('/shipment', authMiddleware, getShipment);
+router.put('/shipment', authMiddleware, updateShipment);
 
 // Admin routes - Require admin privileges
 // Example: Get all users (admin only)

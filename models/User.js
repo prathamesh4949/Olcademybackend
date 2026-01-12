@@ -1,4 +1,48 @@
 import mongoose from 'mongoose'
+const customerInfoSchema = new mongoose.Schema({
+    name: {
+        type: String,
+        required: [true, 'Customer name is required'],
+        trim: true
+    },
+    email: {
+        type: String,
+        required: [true, 'Customer email is required'],
+        lowercase: true,
+        trim: true,
+        match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
+    },
+    phone: {
+        type: String,
+        required: [true, 'Customer phone is required'],
+        trim: true
+    },
+    address: {
+        type: String,
+        required: [true, 'Customer address is required'],
+        trim: true
+    },
+    city: {
+        type: String,
+        required: [true, 'City is required'],
+        trim: true
+    },
+    state: {
+        type: String,
+        trim: true
+    },
+    zipCode: {
+        type: String,
+        required: [true, 'Zip code is required'],
+        trim: true
+    },
+    country: {
+        type: String,
+        required: [true, 'Country is required'],
+        trim: true,
+        default: 'United States'
+    }
+});
 
 const userSchema = mongoose.Schema({
     username: {
@@ -46,6 +90,10 @@ const userSchema = mongoose.Schema({
     },
     emailOtpExpiry: {
         type: Date
+    },
+    shipment: {
+        type: [customerInfoSchema],
+        default: []
     }
 }, { timestamps: true })
 
