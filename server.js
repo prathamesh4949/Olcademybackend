@@ -22,67 +22,48 @@ dotenv.config();
 
 const app = express();
 
-app.use(cors({
-  origin: ['http://localhost:4028','https://vercel.com/prathameshs-projects-051c34ba/olcademyfrontend'],
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true,
-}));
-
-// 🔥 THIS LINE IS MANDATORY
-app.options("*", cors());
-
 // ✅ ES6 module dirname workaround
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-
 
 // Middlewares
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(cookieParser());
 
-// ✅ Subscriber route
-app.use("/api", subscriberRoutes);
+// ✅ CORS configuration - SINGLE, COMPREHENSIVE SETUP
+const allowedOrigins = [
+    "http://localhost:4028",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "https://olcademyfrontend.vercel.app",  // ✅ Your actual frontend URL
+    process.env.FRONTEND_URL
+].filter(Boolean);
 
-// CORS configuration
-const corsOptions = {
+// Apply CORS middleware
+app.use(cors({
     origin: function (origin, callback) {
+        // Allow requests with no origin (like mobile apps, Postman, or curl)
         if (!origin) return callback(null, true);
-        
-        const allowedOrigins = [
-            "http://localhost:4028",
-            "http://localhost:3000",
-            "https://olcademyfrontend.vercel.app",
-            process.env.FRONTEND_URL
-        ].filter(Boolean);
         
         if (allowedOrigins.includes(origin)) {
             callback(null, true);
         } else {
-            callback(new Error('Not allowed by CORS'));
+            callback(new Error(`Origin ${origin} not allowed by CORS`));
         }
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
     allowedHeaders: ['Content-Type', 'Authorization', 'Cookie', 'x-requested-with'],
     exposedHeaders: ['Set-Cookie']
-};
+}));
 
-app.use(cors(corsOptions));
+// Handle preflight requests
+app.options("*", cors());
 
-
-// Additional CORS headers
+// Additional CORS headers middleware
 app.use((req, res, next) => {
     const origin = req.headers.origin;
-    const allowedOrigins = [
-        "http://localhost:4028",
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "https://olcademyfrontend.vercel.app",
-        process.env.FRONTEND_URL
-    ].filter(Boolean);
     
     if (allowedOrigins.includes(origin)) {
         res.header('Access-Control-Allow-Origin', origin);
@@ -94,11 +75,13 @@ app.use((req, res, next) => {
     res.header('Access-Control-Max-Age', '86400');
     
     if (req.method === 'OPTIONS') {
-        res.sendStatus(200);
-    } else {
-        next();
+        return res.sendStatus(200);
     }
+    next();
 });
+
+// ✅ Subscriber route
+app.use("/api", subscriberRoutes);
 
 // ✅ OPTIMIZED: Ensure public/images directory exists with absolute path
 const publicPath = path.join(__dirname, 'public');
