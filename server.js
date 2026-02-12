@@ -23,7 +23,7 @@ dotenv.config();
 const app = express();
 
 app.use(cors({
-  origin: "http://localhost:4028",
+  origin: ['http://localhost:4028','https://vercel.com/prathameshs-projects-051c34ba/olcademyfrontend'],
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
   credentials: true,
